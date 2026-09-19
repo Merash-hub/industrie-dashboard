@@ -47,4 +47,34 @@ public class AppDbContext : DbContext
             b.Property(a => a.Aktion).IsRequired().HasMaxLength(200);
         });
     }
+
+    /// <summary>
+    /// Der Audit-Trail darf nur angelegt, nie geändert oder gelöscht werden.
+    /// Diese Prüfung greift unabhängig davon, über welchen Code-Pfad ein
+    /// Update/Delete versucht wird, und ergänzt die init-only-Eigenschaften
+    /// von <see cref="AuditLogEintrag"/>.
+    /// </summary>
+    private void PruefeAuditLogUnveraenderlichkeit()
+    {
+        var verletzungen = ChangeTracker.Entries<AuditLogEintrag>()
+            .Any(e => e.State is EntityState.Modified or EntityState.Deleted);
+
+        if (verletzungen)
+        {
+            throw new InvalidOperationException(
+                "Audit-Log-Einträge sind unveränderlich: Ändern oder Löschen ist nicht erlaubt.");
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        PruefeAuditLogUnveraenderlichkeit();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        PruefeAuditLogUnveraenderlichkeit();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
 }

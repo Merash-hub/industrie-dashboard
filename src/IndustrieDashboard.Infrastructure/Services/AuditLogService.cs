@@ -16,6 +16,12 @@ public class AuditLogService : IAuditLogService
 
     public async Task ProtokolliereAsync(AuditLogEintrag eintrag, CancellationToken ct = default)
     {
+        if (eintrag.Id != 0)
+        {
+            throw new InvalidOperationException(
+                "Audit-Log-Einträge sind unveränderlich: ProtokolliereAsync legt ausschließlich neue Einträge an, kein Wiederverwenden eines bestehenden Eintrags.");
+        }
+
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         db.AuditLogEintraege.Add(eintrag);
         await db.SaveChangesAsync(ct);
@@ -25,6 +31,7 @@ public class AuditLogService : IAuditLogService
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.AuditLogEintraege
+            .AsNoTracking()
             .OrderByDescending(a => a.Zeitstempel)
             .Take(maxAnzahl)
             .ToListAsync(ct);
