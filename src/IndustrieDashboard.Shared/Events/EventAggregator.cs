@@ -49,4 +49,23 @@ public class EventAggregator : IEventAggregator
             ((Action<TEvent>)handler).Invoke(evt);
         }
     }
+
+    /// <summary>
+    /// Nur für Diagnose und Tests: Anzahl aktuell registrierter Abonnenten für
+    /// TEvent. Damit lässt sich nachweisen, dass ViewModels sich beim
+    /// Verwerfen (Dispose) korrekt wieder abmelden, statt sich bei jedem
+    /// Moduswechsel anzusammeln.
+    /// </summary>
+    public int AnzahlAbonnenten<TEvent>()
+    {
+        if (!_handlerListen.TryGetValue(typeof(TEvent), out var liste))
+        {
+            return 0;
+        }
+
+        lock (_sperre)
+        {
+            return liste.Count;
+        }
+    }
 }

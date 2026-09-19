@@ -1,7 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- net10.0-windows statt net10.0, damit die Shell (IndustrieDashboard.App,
+         WPF) referenziert werden kann - für den Navigations-/DI-Scope-Test. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -26,6 +28,8 @@
     <ProjectReference Include="..\..\src\IndustrieDashboard.Core\IndustrieDashboard.Core.csproj" />
     <ProjectReference Include="..\..\src\IndustrieDashboard.Shared\IndustrieDashboard.Shared.csproj" />
     <ProjectReference Include="..\..\src\IndustrieDashboard.Infrastructure\IndustrieDashboard.Infrastructure.csproj" />
+    <!-- Für den Navigations-/DI-Scope-Test: MainWindowViewModel und die Module. -->
+    <ProjectReference Include="..\..\src\IndustrieDashboard.App\IndustrieDashboard.App.csproj" />
   </ItemGroup>
 
 </Project>

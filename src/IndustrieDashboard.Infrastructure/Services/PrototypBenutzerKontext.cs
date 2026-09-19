@@ -26,6 +26,12 @@ public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
 
     public event EventHandler? BenutzerGewechselt;
 
+    /// <summary>
+    /// Nur für Diagnose und Tests: Anzahl aktuell registrierter Abonnenten von
+    /// <see cref="BenutzerGewechselt"/>.
+    /// </summary>
+    public int AnzahlBenutzerGewechseltAbonnenten => BenutzerGewechselt?.GetInvocationList().Length ?? 0;
+
     public void Wechsle(string benutzer)
     {
         if (!Testbenutzer.Contains(benutzer))
