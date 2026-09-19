@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>IndustrieDashboard.App</RootNamespace>
+    <AssemblyName>IndustrieDashboard</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IndustrieDashboard.Core\IndustrieDashboard.Core.csproj" />
+    <ProjectReference Include="..\IndustrieDashboard.Shared\IndustrieDashboard.Shared.csproj" />
+    <ProjectReference Include="..\IndustrieDashboard.Infrastructure\IndustrieDashboard.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\IndustrieDashboard.Modules.Dashboard\IndustrieDashboard.Modules.Dashboard.csproj" />
+    <ProjectReference Include="..\Modules\IndustrieDashboard.Modules.Schichtplanung\IndustrieDashboard.Modules.Schichtplanung.csproj" />
+    <ProjectReference Include="..\Modules\IndustrieDashboard.Modules.Maschinenueberwachung\IndustrieDashboard.Modules.Maschinenueberwachung.csproj" />
+    <ProjectReference Include="..\Modules\IndustrieDashboard.Modules.Kontrolleingriffe\IndustrieDashboard.Modules.Kontrolleingriffe.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaterialDesignThemes" Version="5.3.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.11" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+{
+    // Startkonfiguration für VS Code. Mit F5 wird das Dashboard gebaut und gestartet.
+    // Wichtig: Es muss der Ordner geöffnet sein, in dem die IndustrieDashboard.sln liegt.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Industrie-Dashboard starten",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/src/IndustrieDashboard.App/bin/Debug/net10.0-windows/IndustrieDashboard.exe",
+            "args": [],
+            "cwd": "${workspaceFolder}/src/IndustrieDashboard.App",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}

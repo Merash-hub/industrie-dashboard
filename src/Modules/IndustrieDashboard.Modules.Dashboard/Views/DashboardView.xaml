@@ -1,0 +1,86 @@
+<UserControl x:Class="IndustrieDashboard.Modules.Dashboard.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:vm="clr-namespace:IndustrieDashboard.Modules.Dashboard.ViewModels"
+             d:DataContext="{d:DesignInstance Type=vm:DashboardViewModel}"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+             Background="{DynamicResource MaterialDesignPaper}"
+             FontFamily="{materialDesign:MaterialDesignFont}">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+            <materialDesign:PackIcon Kind="ViewDashboard" Width="28" Height="28" VerticalAlignment="Center" />
+            <TextBlock Text="Dashboard" FontSize="24" FontWeight="Medium" Margin="8,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- KPI-Kacheln: eine Karte pro Maschine mit Status-Ampel und aktuellem Wert -->
+        <ItemsControl Grid.Row="1" ItemsSource="{Binding Maschinen}" Margin="0,0,0,16">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <materialDesign:Card Margin="0,0,16,16" Padding="16" Width="220"
+                                         materialDesign:ElevationAssist.Elevation="Dp2">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="12" Height="12" VerticalAlignment="Center" Fill="{Binding StatusBrush}" />
+                                <TextBlock Text="{Binding StatusText}" Margin="6,0,0,0" FontSize="12" Opacity="0.7" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="Medium" FontSize="16" Margin="0,8,0,0" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Standort}" FontSize="12" Opacity="0.6" />
+                            <TextBlock Margin="0,12,0,0" FontSize="28" FontWeight="Bold">
+                                <Run Text="{Binding AktuellerWert, Mode=OneWay, StringFormat={}{0:0.0}}" />
+                                <Run Text=" %" FontSize="14" FontWeight="Normal" Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                            </TextBlock>
+                        </StackPanel>
+                    </materialDesign:Card>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Live-Verlauf und Kontrolleingriff-Demo -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="16" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <materialDesign:Card Grid.Column="0" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="Ø Auslastung – Live-Verlauf" FontWeight="Medium" Margin="0,0,0,8" />
+                    <lvc:CartesianChart Series="{Binding AuslastungsSerien}" Height="280" />
+                </StackPanel>
+            </materialDesign:Card>
+
+            <materialDesign:Card Grid.Column="2" Padding="16">
+                <StackPanel>
+                    <TextBlock Text="Kontrolleingriff (Vier-Augen-Prinzip)" FontWeight="Medium" Margin="0,0,0,8" TextWrapping="Wrap" />
+                    <TextBlock Text="Maschine auswählen:" Margin="0,8,0,4" FontSize="12" Opacity="0.7" />
+                    <ComboBox ItemsSource="{Binding Maschinen}"
+                              SelectedItem="{Binding AusgewaehlteMaschine}"
+                              DisplayMemberPath="Name" />
+                    <Button Content="Not-Stopp anfordern"
+                            Style="{StaticResource MaterialDesignRaisedButton}"
+                            Command="{Binding KontrolleingriffAnfordernCommand}"
+                            Margin="0,16,0,0" />
+                    <TextBlock Text="{Binding StatusMeldung}" Margin="0,16,0,0" TextWrapping="Wrap" FontSize="12" />
+                </StackPanel>
+            </materialDesign:Card>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,59 @@
+<Window x:Class="IndustrieDashboard.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:vm="clr-namespace:IndustrieDashboard.App.ViewModels"
+        d:DataContext="{d:DesignInstance Type=vm:MainWindowViewModel}"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008/design"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Industrie-Dashboard – Prototyp"
+        Height="800" Width="1280"
+        WindowStartupLocation="CenterScreen"
+        TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+        Background="{DynamicResource MaterialDesignPaper}"
+        FontFamily="{materialDesign:MaterialDesignFont}">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Navigation -->
+        <materialDesign:ColorZone Grid.Column="0" Mode="PrimaryDark" Padding="0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top" Margin="16,20,16,16">
+                    <TextBlock Text="Industrie-" FontSize="20" FontWeight="Bold" Foreground="White" />
+                    <TextBlock Text="Dashboard" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,-4,0,0" />
+                    <TextBlock Text="Prototyp v0.1" FontSize="11" Foreground="#CCFFFFFF" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <ListBox ItemsSource="{Binding NavigationEintraege}"
+                         SelectedItem="{Binding AusgewaehlterEintrag}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Margin="0,8,0,0">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="16,12" />
+                            <Setter Property="Foreground" Value="White" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="{Binding IconKind}" Width="20" Height="20" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding AnzeigeName}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </materialDesign:ColorZone>
+
+        <!-- Aktives Modul -->
+        <ContentControl Grid.Column="1" Content="{Binding AktuelleAnsicht}" />
+    </Grid>
+</Window>
