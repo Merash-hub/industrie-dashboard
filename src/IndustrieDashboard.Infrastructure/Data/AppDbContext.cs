@@ -49,10 +49,56 @@ public class AppDbContext : DbContext
     }
 
     /// <summary>
+    /// Erstellt das Schema, falls es noch nicht existiert, und legt danach die
+    /// SQLite-Trigger an, die UPDATE/DELETE auf der Audit-Log-Tabelle
+    /// abweisen. Muss beim Initialisieren der Datenbank statt eines nackten
+    /// <c>Database.EnsureCreated()</c> aufgerufen werden.
+    /// </summary>
+    public void SicherstellenErstelltMitAuditSchutz()
+    {
+        Database.EnsureCreated();
+        ErstelleAuditLogTrigger();
+    }
+
+    /// <summary>
+    /// <see cref="PruefeAuditLogUnveraenderlichkeit"/> greift nur, wenn über
+    /// den ChangeTracker gespeichert wird. <c>ExecuteUpdate</c>,
+    /// <c>ExecuteDelete</c> und rohes SQL gehen daran vorbei, weil sie direkt
+    /// gegen die Datenbank übersetzt werden. Diese Trigger sind deshalb die
+    /// eigentliche, nicht umgehbare Durchsetzung der Unveränderlichkeit: Sie
+    /// greifen auf Datenbankebene, unabhängig vom Zugriffsweg (EF Core,
+    /// rohes ADO.NET, ein externes Tool, das direkt auf die .db-Datei
+    /// zugreift).
+    /// </summary>
+    private void ErstelleAuditLogTrigger()
+    {
+        const string tabelle = "AuditLogEintraege";
+
+        Database.ExecuteSqlRaw($"""
+            CREATE TRIGGER IF NOT EXISTS trg_{tabelle}_kein_update
+            BEFORE UPDATE ON "{tabelle}"
+            BEGIN
+                SELECT RAISE(ABORT, 'Audit-Log-Eintraege sind unveraenderlich: UPDATE ist nicht erlaubt.');
+            END;
+            """);
+
+        Database.ExecuteSqlRaw($"""
+            CREATE TRIGGER IF NOT EXISTS trg_{tabelle}_kein_delete
+            BEFORE DELETE ON "{tabelle}"
+            BEGIN
+                SELECT RAISE(ABORT, 'Audit-Log-Eintraege sind unveraenderlich: DELETE ist nicht erlaubt.');
+            END;
+            """);
+    }
+
+    /// <summary>
     /// Der Audit-Trail darf nur angelegt, nie geändert oder gelöscht werden.
     /// Diese Prüfung greift unabhängig davon, über welchen Code-Pfad ein
     /// Update/Delete versucht wird, und ergänzt die init-only-Eigenschaften
-    /// von <see cref="AuditLogEintrag"/>.
+    /// von <see cref="AuditLogEintrag"/>. Sie fängt Verstöße früh und mit
+    /// einer sprechenden Meldung ab, wenn über den ChangeTracker gespeichert
+    /// wird; die eigentliche, nicht umgehbare Absicherung sind die Trigger
+    /// aus <see cref="ErstelleAuditLogTrigger"/>.
     /// </summary>
     private void PruefeAuditLogUnveraenderlichkeit()
     {

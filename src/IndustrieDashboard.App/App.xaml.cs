@@ -86,7 +86,7 @@ public partial class App : Application
             {
                 var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
                 using var db = dbContextFactory.CreateDbContext();
-                db.Database.EnsureCreated();
+                db.SicherstellenErstelltMitAuditSchutz();
             }
 
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
