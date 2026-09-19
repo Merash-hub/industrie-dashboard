@@ -19,6 +19,7 @@ public class DashboardViewModel : ViewModelBase, IDisposable
 
     private readonly IMaschinenDatenQuelle _maschinenDatenQuelle;
     private readonly IKontrolleingriffService _kontrolleingriffService;
+    private readonly IBenutzerKontext _benutzerKontext;
     private readonly IEventAggregator _eventAggregator;
     private readonly ObservableCollection<double> _auslastungsVerlauf = new();
 
@@ -29,10 +30,12 @@ public class DashboardViewModel : ViewModelBase, IDisposable
     public DashboardViewModel(
         IMaschinenDatenQuelle maschinenDatenQuelle,
         IKontrolleingriffService kontrolleingriffService,
+        IBenutzerKontext benutzerKontext,
         IEventAggregator eventAggregator)
     {
         _maschinenDatenQuelle = maschinenDatenQuelle;
         _kontrolleingriffService = kontrolleingriffService;
+        _benutzerKontext = benutzerKontext;
         _eventAggregator = eventAggregator;
 
         AuslastungsSerien = new ObservableCollection<ISeries>
@@ -106,7 +109,7 @@ public class DashboardViewModel : ViewModelBase, IDisposable
             var anforderung = await _kontrolleingriffService.AnfordernAsync(
                 AusgewaehlteMaschine.Id,
                 $"Not-Stopp für '{AusgewaehlteMaschine.Name}' angefordert (Prototyp-Demo)",
-                angefordertVon: "Steven (Bediener)");
+                angefordertVon: _benutzerKontext.AktuellerBenutzer);
 
             StatusMeldung = $"Kontrolleingriff #{anforderung.Id} angefordert – wartet auf Freigabe durch eine zweite Person (Vier-Augen-Prinzip).";
 

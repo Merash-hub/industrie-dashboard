@@ -21,6 +21,13 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAuditLogService, AuditLogService>();
         services.AddSingleton<IKontrolleingriffService, KontrolleingriffService>();
 
+        // Erst die konkrete Instanz registrieren, dann beide Schnittstellen darauf
+        // abbilden, damit IBenutzerKontext und IBenutzerWechsel garantiert dieselbe
+        // Instanz liefern (siehe PrototypBenutzerKontext).
+        services.AddSingleton<PrototypBenutzerKontext>();
+        services.AddSingleton<IBenutzerKontext>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
+        services.AddSingleton<IBenutzerWechsel>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
+
         // Für den Prototyp: simulierte Datenquelle als Singleton, damit der
         // Timer über die Lebensdauer der App läuft. Später hier einfach durch
         // die echte OPC-UA-/MQTT-Implementierung ersetzen.

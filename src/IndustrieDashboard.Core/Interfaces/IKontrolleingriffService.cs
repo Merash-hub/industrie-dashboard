@@ -12,5 +12,15 @@ public interface IKontrolleingriffService
 
     Task<KontrolleingriffAnforderung> FreigebenAsync(int anforderungId, string freigegebenVon, CancellationToken ct = default);
 
+    /// <summary>
+    /// Ablehnen darf jede Person, auch die anfordernde selbst - eine Ablehnung
+    /// durch die anfordernde Person ist fachlich eine Rücknahme und völlig
+    /// legitim. Der Audit-Log-Eintrag hält fest, wer abgelehnt hat.
+    /// </summary>
+    Task<KontrolleingriffAnforderung> AblehnenAsync(int anforderungId, string abgelehntVon, string? begruendung, CancellationToken ct = default);
+
     Task<IReadOnlyList<KontrolleingriffAnforderung>> GetOffeneAnforderungenAsync(CancellationToken ct = default);
+
+    /// <summary>Liefert alle Anforderungen, absteigend nach <see cref="KontrolleingriffAnforderung.AngefordertAm"/>.</summary>
+    Task<IReadOnlyList<KontrolleingriffAnforderung>> GetAlleAnforderungenAsync(int maxAnzahl = 100, CancellationToken ct = default);
 }

@@ -78,12 +78,45 @@ public class KontrolleingriffService : IKontrolleingriffService
         return anforderung;
     }
 
+    public async Task<KontrolleingriffAnforderung> AblehnenAsync(int anforderungId, string abgelehntVon, string? begruendung, CancellationToken ct = default)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+
+        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
+            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
+
+        var vorherigerStatus = anforderung.Status;
+        anforderung.Status = KontrolleingriffStatus.Abgelehnt;
+        await db.SaveChangesAsync(ct);
+
+        await _auditLogService.ProtokolliereAsync(new AuditLogEintrag
+        {
+            Benutzer = abgelehntVon,
+            Aktion = "Kontrolleingriff abgelehnt",
+            Zielobjekt = $"Maschine #{anforderung.MaschineId}",
+            AlterWert = vorherigerStatus.ToString(),
+            NeuerWert = "Abgelehnt",
+            Begruendung = begruendung
+        }, ct);
+
+        return anforderung;
+    }
+
     public async Task<IReadOnlyList<KontrolleingriffAnforderung>> GetOffeneAnforderungenAsync(CancellationToken ct = default)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         return await db.KontrolleingriffAnforderungen
             .Where(a => a.Status == KontrolleingriffStatus.Angefordert)
             .OrderBy(a => a.AngefordertAm)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<KontrolleingriffAnforderung>> GetAlleAnforderungenAsync(int maxAnzahl = 100, CancellationToken ct = default)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        return await db.KontrolleingriffAnforderungen
+            .OrderByDescending(a => a.AngefordertAm)
+            .Take(maxAnzahl)
             .ToListAsync(ct);
     }
 }
