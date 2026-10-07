@@ -94,7 +94,9 @@ public class DashboardViewModel : ViewModelBase, IDisposable
             Maschinen.Add(new MaschineViewModel(maschine));
         }
 
-        _maschinenDatenQuelle.StartUeberwachung();
+        // Start/Stopp der Überwachung laufen auf Anwendungsebene (siehe
+        // App.xaml.cs) - IMaschinenDatenQuelle ist ein geteilter Singleton-
+        // Dienst, den dieses kurzlebige ViewModel nicht steuern darf.
     }
 
     private async Task KontrolleingriffAnfordernAsync()
@@ -146,6 +148,5 @@ public class DashboardViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         _maschinenDatenQuelle.WertAktualisiert -= OnWertAktualisiert;
-        _maschinenDatenQuelle.StopUeberwachung();
     }
 }

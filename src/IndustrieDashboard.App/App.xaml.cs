@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using IndustrieDashboard.App.ViewModels;
 using IndustrieDashboard.App.Views;
+using IndustrieDashboard.Core.Interfaces;
 using IndustrieDashboard.Infrastructure.Data;
 using IndustrieDashboard.Infrastructure.DependencyInjection;
 using IndustrieDashboard.Modules.Dashboard;
@@ -89,6 +90,14 @@ public partial class App : Application
                 db.SicherstellenErstelltMitAuditSchutz();
             }
 
+            // Die Maschinenüberwachung ist ein geteilter Singleton-Dienst und gehört
+            // damit auf Anwendungsebene: läuft vom Programmstart bis zum Beenden
+            // (dort per _serviceProvider.Dispose(), das IMaschinenDatenQuelle als
+            // IDisposable automatisch mit stoppt), unabhängig davon, welches Modul
+            // gerade angezeigt wird. Ein kurzlebiges Modul-ViewModel darf sie nicht
+            // abschalten, nur wenn es selbst gerade nicht mehr angezeigt wird.
+            _serviceProvider.GetRequiredService<IMaschinenDatenQuelle>().StartUeberwachung();
+
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             mainWindow.Show();
         }
@@ -106,8 +115,12 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
-        Log.CloseAndFlush();
+        // Reihenfolge wichtig: Erst den Container disposen (das stoppt u. a.
+        // die Maschinenüberwachung über IDisposable und protokolliert das
+        // noch), danach den Logger schließen - nicht umgekehrt, sonst gehen
+        // Log-Meldungen aus der Container-Entsorgung ins Leere.
         _serviceProvider?.Dispose();
+        Log.CloseAndFlush();
         base.OnExit(e);
     }
 }
