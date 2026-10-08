@@ -16,11 +16,10 @@ namespace IndustrieDashboard.Modules.Dashboard.ViewModels;
 /// </summary>
 public class DashboardViewModel : ViewModelBase, IDisposable
 {
-    private const int MaxVerlaufsPunkte = 30;
-
     private readonly IMaschinenDatenQuelle _maschinenDatenQuelle;
     private readonly IKontrolleingriffService _kontrolleingriffService;
     private readonly IBenutzerKontext _benutzerKontext;
+    private readonly IVerlaufsDienst _verlaufsDienst;
     private readonly IEventAggregator _eventAggregator;
     private readonly ObservableCollection<double> _auslastungsVerlauf = new();
 
@@ -32,11 +31,13 @@ public class DashboardViewModel : ViewModelBase, IDisposable
         IMaschinenDatenQuelle maschinenDatenQuelle,
         IKontrolleingriffService kontrolleingriffService,
         IBenutzerKontext benutzerKontext,
+        IVerlaufsDienst verlaufsDienst,
         IEventAggregator eventAggregator)
     {
         _maschinenDatenQuelle = maschinenDatenQuelle;
         _kontrolleingriffService = kontrolleingriffService;
         _benutzerKontext = benutzerKontext;
+        _verlaufsDienst = verlaufsDienst;
         _eventAggregator = eventAggregator;
 
         AuslastungsSerien = new ObservableCollection<ISeries>
@@ -56,6 +57,7 @@ public class DashboardViewModel : ViewModelBase, IDisposable
 
         _maschinenDatenQuelle.WertAktualisiert += OnWertAktualisiert;
         _benutzerKontext.BenutzerGewechselt += OnBenutzerGewechselt;
+        _verlaufsDienst.VerlaufAktualisiert += OnVerlaufAktualisiert;
     }
 
     public ObservableCollection<MaschineViewModel> Maschinen { get; } = new();
@@ -105,9 +107,13 @@ public class DashboardViewModel : ViewModelBase, IDisposable
             Maschinen.Add(new MaschineViewModel(maschine));
         }
 
-        // Start/Stopp der Überwachung laufen auf Anwendungsebene (siehe
-        // App.xaml.cs) - IMaschinenDatenQuelle ist ein geteilter Singleton-
-        // Dienst, den dieses kurzlebige ViewModel nicht steuern darf.
+        // Start/Stopp der Überwachung und der Verlaufserfassung laufen auf
+        // Anwendungsebene (siehe App.xaml.cs) - beides sind geteilte Singleton-
+        // Dienste, die dieses kurzlebige ViewModel nicht steuern darf. Die
+        // Momentaufnahme hier zu lesen genügt, damit ein zweites, nach einem
+        // Modulwechsel neu erzeugtes DashboardViewModel sofort den bisherigen
+        // Verlauf sieht, statt bei null anzufangen (Spezifikation Teil B).
+        AktualisiereVerlaufAusDienst();
     }
 
     private async Task KontrolleingriffAnfordernAsync()
@@ -138,21 +144,33 @@ public class DashboardViewModel : ViewModelBase, IDisposable
     {
         // Der Timer der simulierten Datenquelle läuft auf einem Threadpool-Thread;
         // UI-Updates müssen auf den Dispatcher-Thread der WPF-Anwendung.
+        // Der historische Verlauf kommt nicht mehr von hier, sondern aus dem
+        // geteilten IVerlaufsDienst (siehe OnVerlaufAktualisiert) - dieser Tick
+        // aktualisiert nur noch die aktuelle Kachel der jeweiligen Maschine.
         Application.Current?.Dispatcher.BeginInvoke(() =>
         {
             var maschine = Maschinen.FirstOrDefault(m => m.Id == e.MaschineId);
             maschine?.Aktualisieren(e.NeuerWert, e.Status);
-
-            if (Maschinen.Count > 0)
-            {
-                var durchschnitt = Maschinen.Average(m => m.AktuellerWert);
-                _auslastungsVerlauf.Add(Math.Round(durchschnitt, 1));
-                while (_auslastungsVerlauf.Count > MaxVerlaufsPunkte)
-                {
-                    _auslastungsVerlauf.RemoveAt(0);
-                }
-            }
         });
+    }
+
+    /// <summary>
+    /// Der Dienst läuft auf einem Threadpool-Thread (Timer); der Wechsel auf
+    /// den UI-Thread geschieht bewusst hier im ViewModel, nicht im Dienst
+    /// (Spezifikation Teil B).
+    /// </summary>
+    private void OnVerlaufAktualisiert(object? sender, EventArgs e)
+    {
+        Application.Current?.Dispatcher.BeginInvoke(AktualisiereVerlaufAusDienst);
+    }
+
+    private void AktualisiereVerlaufAusDienst()
+    {
+        _auslastungsVerlauf.Clear();
+        foreach (var punkt in _verlaufsDienst.Momentaufnahme)
+        {
+            _auslastungsVerlauf.Add(Math.Round(punkt.Mittelwert, 1));
+        }
     }
 
     private void OnBenutzerGewechselt(object? sender, EventArgs e)
@@ -166,5 +184,6 @@ public class DashboardViewModel : ViewModelBase, IDisposable
     {
         _maschinenDatenQuelle.WertAktualisiert -= OnWertAktualisiert;
         _benutzerKontext.BenutzerGewechselt -= OnBenutzerGewechselt;
+        _verlaufsDienst.VerlaufAktualisiert -= OnVerlaufAktualisiert;
     }
 }

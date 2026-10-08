@@ -31,6 +31,8 @@
     <ProjectReference Include="..\..\src\IndustrieDashboard.Identity.Windows\IndustrieDashboard.Identity.Windows.csproj" />
     <!-- Für den Navigations-/DI-Scope-Test: MainWindowViewModel und die Module. -->
     <ProjectReference Include="..\..\src\IndustrieDashboard.App\IndustrieDashboard.App.csproj" />
+    <!-- Für den DashboardViewModel-Test (Anzeigeverlauf, Spezifikation Teil B). -->
+    <ProjectReference Include="..\..\src\Modules\IndustrieDashboard.Modules.Dashboard\IndustrieDashboard.Modules.Dashboard.csproj" />
   </ItemGroup>
 
 </Project>
