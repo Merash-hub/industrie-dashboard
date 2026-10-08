@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using IndustrieDashboard.Core.Interfaces;
+using IndustrieDashboard.Identity.Windows;
 using IndustrieDashboard.Shared.Modules;
 using IndustrieDashboard.Shared.Mvvm;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,14 +18,20 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IBenutzerKontext _benutzerKontext;
+    private readonly WindowsBenutzerKontext? _windowsBenutzerKontext;
     private object? _aktuelleAnsicht;
     private NavigationEintrag? _ausgewaehlterEintrag;
     private IServiceScope? _aktuellerModulScope;
 
-    public MainWindowViewModel(IServiceProvider serviceProvider, IReadOnlyList<IAppModule> module, IBenutzerKontext benutzerKontext)
+    public MainWindowViewModel(
+        IServiceProvider serviceProvider,
+        IReadOnlyList<IAppModule> module,
+        IBenutzerKontext benutzerKontext,
+        WindowsBenutzerKontext? windowsBenutzerKontext = null)
     {
         _serviceProvider = serviceProvider;
         _benutzerKontext = benutzerKontext;
+        _windowsBenutzerKontext = windowsBenutzerKontext;
 
         foreach (var modul in module.OrderBy(m => m.Reihenfolge))
         {
@@ -41,8 +48,31 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
     public string AngemeldeterBenutzer => _benutzerKontext.AktuellerBenutzer.Anzeigename;
 
     public string RollenAnzeige => _benutzerKontext.Rollen.Count == 0
-        ? "Keine Rolle zugewiesen"
+        ? KeineRolleHinweis()
         : string.Join(", ", _benutzerKontext.Rollen.Select(r => r.ToString()).OrderBy(r => r));
+
+    /// <summary>
+    /// Ist für den Windows-Anbieter keine einzige Rolle vergeben, nennt der
+    /// Hinweis zusätzlich, welche Windows-Gruppen dafür geprüft wurden -
+    /// das hilft beim Einrichten, ohne selbst eine Schutzfunktion zu sein
+    /// (Härtung, auf Wunsch von Steven).
+    /// </summary>
+    private string KeineRolleHinweis()
+    {
+        if (_windowsBenutzerKontext is null)
+        {
+            return "Keine Rolle zugewiesen";
+        }
+
+        var geprueft = _windowsBenutzerKontext.Rollenermittlung
+            .Where(d => d.Gruppenname is not null)
+            .Select(d => $"{d.Rolle}: {d.Gruppenname}")
+            .ToList();
+
+        return geprueft.Count == 0
+            ? "Keine Rolle zugewiesen (keine Windows-Gruppen konfiguriert)"
+            : $"Keine Rolle zugewiesen - geprüfte Windows-Gruppen: {string.Join("; ", geprueft)}";
+    }
 
     public object? AktuelleAnsicht
     {

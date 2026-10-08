@@ -116,8 +116,12 @@ public partial class App : Application
                         ?? new RollenGruppenOptions();
                     // Keine IBenutzerWechsel-Registrierung: Der Benutzerwechsel ist
                     // reine Prototyp-Funktionalität (Spezifikation A8).
-                    services.AddSingleton<IBenutzerKontext>(sp =>
-                        WindowsBenutzerKontext.AusAktuellerAnmeldung(rollenGruppen, sp.GetRequiredService<ILogger<WindowsBenutzerKontext>>()));
+                    services.AddSingleton<WindowsBenutzerKontext>(sp =>
+                        WindowsBenutzerKontext.AusAktuellerAnmeldung(
+                            rollenGruppen,
+                            sp.GetRequiredService<IAuditLogService>(),
+                            sp.GetRequiredService<ILogger<WindowsBenutzerKontext>>()));
+                    services.AddSingleton<IBenutzerKontext>(sp => sp.GetRequiredService<WindowsBenutzerKontext>());
                     break;
             }
 

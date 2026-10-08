@@ -31,6 +31,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     {
         var services = new ServiceCollection();
         services.AddSingleton<IEventAggregator, EventAggregator>();
+        services.AddSingleton<IAuditLogService>(new FakeAuditLogService());
         services.AddSingleton<PrototypBenutzerKontext>();
         services.AddSingleton<IBenutzerKontext>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
         services.AddTransient<AbonnierendesTestViewModel>();
@@ -69,6 +70,14 @@ public sealed class MainWindowViewModelTests : IDisposable
 
         Assert.Equal(0, _eventAggregator.AnzahlAbonnenten<KontrolleingriffStatusGeaendertEvent>());
         Assert.Equal(0, _benutzerKontext.AnzahlBenutzerGewechseltAbonnenten);
+    }
+
+    private sealed class FakeAuditLogService : IAuditLogService
+    {
+        public Task ProtokolliereAsync(IndustrieDashboard.Core.Models.AuditLogEintrag eintrag, CancellationToken ct = default) => Task.CompletedTask;
+
+        public Task<IReadOnlyList<IndustrieDashboard.Core.Models.AuditLogEintrag>> GetEintraegeAsync(int maxAnzahl = 200, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<IndustrieDashboard.Core.Models.AuditLogEintrag>>(Array.Empty<IndustrieDashboard.Core.Models.AuditLogEintrag>());
     }
 
     private sealed class TestModul : IAppModule

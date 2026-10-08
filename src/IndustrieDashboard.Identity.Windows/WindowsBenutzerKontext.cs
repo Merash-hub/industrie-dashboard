@@ -23,16 +23,31 @@ public sealed class WindowsBenutzerKontext : IBenutzerKontext
 
     public IReadOnlySet<Rolle> Rollen { get; }
 
+    /// <summary>
+    /// Je konfigurierter Rolle, ob die Gruppe aufgelöst und die Rolle vergeben
+    /// wurde - Grundlage sowohl für den Anmeldung-Audit-Eintrag als auch für
+    /// einen Hinweis in der Kopfzeile, falls gar keine Rolle vergeben wurde.
+    /// </summary>
+    public IReadOnlyList<RollenErmittlungsDetail> Rollenermittlung { get; }
+
     public event EventHandler? BenutzerGewechselt
     {
         add { }
         remove { }
     }
 
-    public WindowsBenutzerKontext(Benutzer aktuellerBenutzer, IGruppenPruefer gruppenPruefer, RollenGruppenOptions rollenGruppen, ILogger<WindowsBenutzerKontext> logger)
+    public WindowsBenutzerKontext(
+        Benutzer aktuellerBenutzer,
+        IGruppenPruefer gruppenPruefer,
+        RollenGruppenOptions rollenGruppen,
+        IAuditLogService auditLogService,
+        ILogger<WindowsBenutzerKontext> logger)
     {
         AktuellerBenutzer = aktuellerBenutzer;
-        Rollen = ErmittleRollen(gruppenPruefer, rollenGruppen, logger);
+        Rollenermittlung = ErmittleRollenDetails(gruppenPruefer, rollenGruppen, logger);
+        Rollen = Rollenermittlung.Where(d => d.Vergeben).Select(d => d.Rolle).ToHashSet();
+
+        ProtokolliereAnmeldungAsync(auditLogService).GetAwaiter().GetResult();
     }
 
     public bool HatBerechtigung(Berechtigung berechtigung) => RollenBerechtigungen.Hat(Rollen, berechtigung);
@@ -46,7 +61,10 @@ public sealed class WindowsBenutzerKontext : IBenutzerKontext
     /// bereits extrahierten <see cref="Benutzer"/>-Kennung und ist dadurch
     /// ohne echte Windows-Anmeldung testbar.
     /// </summary>
-    public static WindowsBenutzerKontext AusAktuellerAnmeldung(RollenGruppenOptions rollenGruppen, ILogger<WindowsBenutzerKontext> logger)
+    public static WindowsBenutzerKontext AusAktuellerAnmeldung(
+        RollenGruppenOptions rollenGruppen,
+        IAuditLogService auditLogService,
+        ILogger<WindowsBenutzerKontext> logger)
     {
         using var identity = WindowsIdentity.GetCurrent();
         var sid = identity.User?.Value
@@ -54,34 +72,72 @@ public sealed class WindowsBenutzerKontext : IBenutzerKontext
 
         var benutzer = new Benutzer(new BenutzerKennung(sid), identity.Name);
         var gruppenPruefer = new WindowsGruppenPruefer(identity);
-        return new WindowsBenutzerKontext(benutzer, gruppenPruefer, rollenGruppen, logger);
+        return new WindowsBenutzerKontext(benutzer, gruppenPruefer, rollenGruppen, auditLogService, logger);
     }
 
-    private static IReadOnlySet<Rolle> ErmittleRollen(IGruppenPruefer gruppenPruefer, RollenGruppenOptions rollenGruppen, ILogger logger)
+    private static IReadOnlyList<RollenErmittlungsDetail> ErmittleRollenDetails(
+        IGruppenPruefer gruppenPruefer, RollenGruppenOptions rollenGruppen, ILogger logger)
     {
-        var rollen = new HashSet<Rolle>();
+        var details = new List<RollenErmittlungsDetail>();
 
         foreach (var (rolle, gruppenname) in rollenGruppen.AlleZuordnungen())
         {
             if (string.IsNullOrWhiteSpace(gruppenname))
             {
+                details.Add(new RollenErmittlungsDetail(rolle, null, false, "Keine Gruppe konfiguriert"));
                 continue;
             }
 
             if (gruppenPruefer.IstMitglied(gruppenname, out var aufloesungsFehler))
             {
-                rollen.Add(rolle);
+                details.Add(new RollenErmittlungsDetail(rolle, gruppenname, true, null));
             }
             else if (aufloesungsFehler is not null)
             {
-                // Fail closed: Eine nicht aufloesbare Gruppe vergibt die Rolle
-                // nicht, sie wird nur protokolliert - niemals "im Zweifel erlauben".
+                // Fail closed: Eine nicht aufloesbare (oder zu breite) Gruppe
+                // vergibt die Rolle nicht, sie wird nur protokolliert -
+                // niemals "im Zweifel erlauben".
                 logger.LogWarning(
                     "Windows-Gruppe '{Gruppenname}' für Rolle {Rolle} konnte nicht aufgelöst werden ({Grund}); die Rolle wird nicht vergeben.",
                     gruppenname, rolle, aufloesungsFehler);
+                details.Add(new RollenErmittlungsDetail(rolle, gruppenname, false, aufloesungsFehler));
+            }
+            else
+            {
+                details.Add(new RollenErmittlungsDetail(rolle, gruppenname, false, "Keine Mitgliedschaft"));
             }
         }
 
-        return rollen;
+        return details;
+    }
+
+    /// <summary>
+    /// Schreibt einen Audit-Eintrag der Kategorie <see cref="AuditKategorie.Anmeldung"/>
+    /// mit Kennung, Anzeigename, vergebenen Rollen und je Rolle dem konfigurierten
+    /// Gruppennamen samt Auflösungsergebnis - nicht aufgelöste Gruppen gesondert
+    /// vermerkt (Härtung, auf Wunsch von Steven).
+    /// </summary>
+    private async Task ProtokolliereAnmeldungAsync(IAuditLogService auditLogService)
+    {
+        var vergebeneRollen = Rollenermittlung.Where(d => d.Vergeben).Select(d => d.Rolle.ToString()).ToList();
+        var nichtAufgeloest = Rollenermittlung.Where(d => !d.Vergeben && d.Grund is not null && d.Gruppenname is not null).ToList();
+
+        var zeilen = Rollenermittlung.Select(d => d.Gruppenname is null
+            ? $"{d.Rolle}: keine Gruppe konfiguriert"
+            : $"{d.Rolle}: Gruppe '{d.Gruppenname}' - {(d.Vergeben ? "aufgelöst, Rolle vergeben" : $"NICHT vergeben ({d.Grund})")}");
+
+        await auditLogService.ProtokolliereAsync(new AuditLogEintrag
+        {
+            Benutzer = AktuellerBenutzer.Anzeigename,
+            BenutzerKennung = AktuellerBenutzer.Kennung.Wert,
+            Kategorie = AuditKategorie.Anmeldung,
+            Aktion = "Windows-Anmeldung",
+            Zielobjekt = "Rollenermittlung",
+            NeuerWert = vergebeneRollen.Count > 0 ? string.Join(", ", vergebeneRollen) : "Keine Rolle zugewiesen",
+            Begruendung = string.Join("; ", zeilen)
+        });
     }
 }
+
+/// <summary>Ergebnis der Rollenermittlung für eine einzelne Rolle (siehe <see cref="WindowsBenutzerKontext.Rollenermittlung"/>).</summary>
+public sealed record RollenErmittlungsDetail(Rolle Rolle, string? Gruppenname, bool Vergeben, string? Grund);

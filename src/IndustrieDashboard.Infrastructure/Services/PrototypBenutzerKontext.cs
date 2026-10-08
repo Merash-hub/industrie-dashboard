@@ -32,14 +32,17 @@ public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
         (new Benutzer(new BenutzerKennung("proto:nina"), "Nina Fischer (Administration)"), RollenMenge(Rolle.Administration)),
     };
 
+    private readonly IAuditLogService _auditLogService;
     private int _aktuellerIndex;
 
-    public PrototypBenutzerKontext()
+    public PrototypBenutzerKontext(IAuditLogService auditLogService)
     {
 #if !DEBUG
         throw new InvalidOperationException(
             "PrototypBenutzerKontext ist nur in Debug-Builds zulässig (Spezifikation A8).");
 #endif
+        _auditLogService = auditLogService;
+        ProtokolliereAnmeldungAsync().GetAwaiter().GetResult();
     }
 
     public Benutzer AktuellerBenutzer => Testbenutzer[_aktuellerIndex].Benutzer;
@@ -72,8 +75,29 @@ public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
         }
 
         _aktuellerIndex = index;
+        ProtokolliereAnmeldungAsync().GetAwaiter().GetResult();
         BenutzerGewechselt?.Invoke(this, EventArgs.Empty);
     }
 
     private static IReadOnlySet<Rolle> RollenMenge(params Rolle[] rollen) => rollen.ToHashSet();
+
+    /// <summary>
+    /// Schreibt einen Audit-Eintrag der Kategorie
+    /// <see cref="AuditKategorie.Anmeldung"/> mit dem gewählten Testbenutzer -
+    /// beim ersten Start und bei jedem Benutzerwechsel, der im Prototyp an
+    /// die Stelle einer echten An-/Abmeldung tritt (Härtung, auf Wunsch von Steven).
+    /// </summary>
+    private Task ProtokolliereAnmeldungAsync()
+    {
+        var benutzer = AktuellerBenutzer;
+        return _auditLogService.ProtokolliereAsync(new AuditLogEintrag
+        {
+            Benutzer = benutzer.Anzeigename,
+            BenutzerKennung = benutzer.Kennung.Wert,
+            Kategorie = AuditKategorie.Anmeldung,
+            Aktion = "Prototyp-Anmeldung (Benutzerwechsel)",
+            Zielobjekt = "Rollenermittlung",
+            NeuerWert = string.Join(", ", Rollen)
+        });
+    }
 }

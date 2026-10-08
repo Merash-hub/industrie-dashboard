@@ -61,6 +61,16 @@ bietet ausschließlich Anlegen (`ProtokolliereAsync`) und Lesen
 für sicherheitsrelevante Aktionen (insbesondere Kontrolleingriffe) verbindlich
 und darf beim Erweitern nicht aufgeweicht werden.
 
+### Betriebshinweis: Installationsordner
+
+`appsettings.json` neben der EXE enthält die Zuordnung Rolle → Windows-Gruppe
+(`Sicherheit:RollenGruppen`). Die Konfiguration kann nur auswählen und
+benennen, nie Rechte verleihen (die Rolle kommt ausschließlich aus echter
+Windows-Gruppenmitgliedschaft) - trotzdem darf der Installationsordner **nur
+für Administratoren beschreibbar** sein. Wer die Datei ändern kann, kann sonst
+z. B. `Instandhaltung` versehentlich oder absichtlich auf eine falsche Gruppe
+umbiegen. Normale Benutzer dürfen die Datei lesen, aber nicht schreiben.
+
 ## Konventionen
 
 - Bezeichner und Kommentare auf Deutsch (so ist der bestehende Code geschrieben)

@@ -26,10 +26,26 @@ public sealed class WindowsGruppenPruefer : IGruppenPruefer
         {
             var konto = new NTAccount(gruppenname);
             var sid = (SecurityIdentifier)konto.Translate(typeof(SecurityIdentifier));
+
+            // Haertung: Eine Rollengruppe, die auf eine breite Sammelgruppe
+            // (Everyone, Authentifizierte Benutzer, BUILTIN\Users/Guests,
+            // Domaenen-Benutzer/-Gaeste) aufloest, vergibt die Rolle praktisch
+            // jedem angemeldeten Menschen - das wird abgelehnt, nicht nur
+            // protokolliert.
+            if (BreiteSammelgruppenErkennung.IstZuBreit(sid, out var sammelgruppenGrund))
+            {
+                aufloesungsFehler = sammelgruppenGrund;
+                return false;
+            }
+
             return _principal.IsInRole(sid);
         }
-        catch (IdentityNotMappedException ex)
+        catch (Exception ex)
         {
+            // Haertung: nicht nur IdentityNotMappedException (Gruppe nicht
+            // gefunden), sondern jede Ausnahme bei der Gruppenaufloesung -
+            // die Rolle wird dann nicht vergeben, der Grund steht im Log
+            // (siehe WindowsBenutzerKontext), die Anwendung laeuft weiter.
             aufloesungsFehler = ex.Message;
             return false;
         }
