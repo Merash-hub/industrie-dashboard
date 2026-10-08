@@ -39,7 +39,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
         _benutzerWechsel = benutzerWechsel;
         _eventAggregator = eventAggregator;
 
-        _aktuellerBenutzer = _benutzerKontext.AktuellerBenutzer;
+        _aktuellerBenutzer = _benutzerKontext.AktuellerBenutzer.Anzeigename;
 
         FreigebenCommand = new AsyncRelayCommand(FreigebenAsync, p => p is AnforderungViewModel);
         AblehnenCommand = new AsyncRelayCommand(AblehnenAsync, p => p is AnforderungViewModel);
@@ -198,7 +198,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
     private void OnBenutzerGewechselt(object? sender, EventArgs e)
     {
-        _aktuellerBenutzer = _benutzerKontext.AktuellerBenutzer;
+        _aktuellerBenutzer = _benutzerKontext.AktuellerBenutzer.Anzeigename;
         OnPropertyChanged(nameof(AktuellerBenutzer));
 
         foreach (var anforderung in OffeneAnforderungen)

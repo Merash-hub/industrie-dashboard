@@ -111,7 +111,7 @@ public class DashboardViewModel : ViewModelBase, IDisposable
             var anforderung = await _kontrolleingriffService.AnfordernAsync(
                 AusgewaehlteMaschine.Id,
                 $"Not-Stopp für '{AusgewaehlteMaschine.Name}' angefordert (Prototyp-Demo)",
-                angefordertVon: _benutzerKontext.AktuellerBenutzer);
+                angefordertVon: _benutzerKontext.AktuellerBenutzer.Anzeigename);
 
             StatusMeldung = $"Kontrolleingriff #{anforderung.Id} angefordert – wartet auf Freigabe durch eine zweite Person (Vier-Augen-Prinzip).";
 

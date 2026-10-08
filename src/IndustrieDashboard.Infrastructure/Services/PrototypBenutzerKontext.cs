@@ -1,28 +1,33 @@
+using IndustrieDashboard.Core.Autorisierung;
+using IndustrieDashboard.Core.Enums;
 using IndustrieDashboard.Core.Interfaces;
+using IndustrieDashboard.Core.Models;
 
 namespace IndustrieDashboard.Infrastructure.Services;
 
 /// <summary>
 /// Prototyp-Implementierung von <see cref="IBenutzerKontext"/> und
-/// <see cref="IBenutzerWechsel"/>: eine feste Liste von Testbenutzern, zwischen
-/// denen sich ohne echte Anmeldung umschalten lässt. Wird später durch eine
-/// Active-Directory-/IdentityServer-Anbindung ersetzt, die nur noch
-/// IBenutzerKontext bedient.
+/// <see cref="IBenutzerWechsel"/>: eine feste Liste von Testbenutzern mit
+/// fester Kennung und Rolle, zwischen denen sich ohne echte Anmeldung
+/// umschalten lässt. Wird später durch eine Active-Directory-/Entra-ID-
+/// Anbindung ersetzt, die nur noch IBenutzerKontext bedient.
 /// </summary>
 public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
 {
-    private static readonly IReadOnlyList<string> Testbenutzer = new[]
+    private static readonly IReadOnlyList<(Benutzer Benutzer, IReadOnlySet<Rolle> Rollen)> Testbenutzer = new List<(Benutzer, IReadOnlySet<Rolle>)>
     {
-        "Steven Katzer (Bediener)",
-        "Anna Weber (Schichtleitung)",
-        "Thomas Krause (Instandhaltung)"
+        (new Benutzer(new BenutzerKennung("proto:steven"), "Steven Katzer (Bediener)"), RollenMenge(Rolle.Bediener)),
+        (new Benutzer(new BenutzerKennung("proto:anna"), "Anna Weber (Schichtleitung)"), RollenMenge(Rolle.Schichtleitung)),
+        (new Benutzer(new BenutzerKennung("proto:thomas"), "Thomas Krause (Instandhaltung)"), RollenMenge(Rolle.Instandhaltung)),
     };
 
-    private string _aktuellerBenutzer = Testbenutzer[0];
+    private int _aktuellerIndex;
 
-    public string AktuellerBenutzer => _aktuellerBenutzer;
+    public Benutzer AktuellerBenutzer => Testbenutzer[_aktuellerIndex].Benutzer;
 
-    public IReadOnlyList<string> VerfuegbareBenutzer => Testbenutzer;
+    public IReadOnlySet<Rolle> Rollen => Testbenutzer[_aktuellerIndex].Rollen;
+
+    public IReadOnlyList<string> VerfuegbareBenutzer => Testbenutzer.Select(t => t.Benutzer.Anzeigename).ToList();
 
     public event EventHandler? BenutzerGewechselt;
 
@@ -32,19 +37,24 @@ public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
     /// </summary>
     public int AnzahlBenutzerGewechseltAbonnenten => BenutzerGewechselt?.GetInvocationList().Length ?? 0;
 
+    public bool HatBerechtigung(Berechtigung berechtigung) => RollenBerechtigungen.Hat(Rollen, berechtigung);
+
     public void Wechsle(string benutzer)
     {
-        if (!Testbenutzer.Contains(benutzer))
+        var index = Testbenutzer.ToList().FindIndex(t => t.Benutzer.Anzeigename == benutzer);
+        if (index < 0)
         {
             throw new ArgumentException($"Unbekannter Benutzer: {benutzer}", nameof(benutzer));
         }
 
-        if (_aktuellerBenutzer == benutzer)
+        if (_aktuellerIndex == index)
         {
             return;
         }
 
-        _aktuellerBenutzer = benutzer;
+        _aktuellerIndex = index;
         BenutzerGewechselt?.Invoke(this, EventArgs.Empty);
     }
+
+    private static IReadOnlySet<Rolle> RollenMenge(params Rolle[] rollen) => rollen.ToHashSet();
 }

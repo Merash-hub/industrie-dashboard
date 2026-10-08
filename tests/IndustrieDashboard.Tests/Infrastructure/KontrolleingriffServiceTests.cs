@@ -103,7 +103,7 @@ public sealed class KontrolleingriffServiceTests : IDisposable
 
         kontext.Wechsle(neuerBenutzer);
 
-        Assert.Equal(neuerBenutzer, kontext.AktuellerBenutzer);
+        Assert.Equal(neuerBenutzer, kontext.AktuellerBenutzer.Anzeigename);
         Assert.True(ausgeloest);
     }
 
