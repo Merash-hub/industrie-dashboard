@@ -13,7 +13,7 @@ namespace IndustrieDashboard.Infrastructure.DependencyInjection;
 /// </summary>
 public static class InfrastructureServiceCollectionExtensions
 {
-    public static IServiceCollection AddInfrastruktur(this IServiceCollection services, string sqliteDbPfad)
+    public static IServiceCollection AddInfrastruktur(this IServiceCollection services, string sqliteDbPfad, VerlaufsOptionen? verlaufsOptionen = null)
     {
         services.AddPooledDbContextFactory<AppDbContext>(options =>
             options.UseSqlite($"Data Source={sqliteDbPfad}"));
@@ -31,6 +31,14 @@ public static class InfrastructureServiceCollectionExtensions
         // Timer über die Lebensdauer der App läuft. Später hier einfach durch
         // die echte OPC-UA-/MQTT-Implementierung ersetzen.
         services.AddSingleton<IMaschinenDatenQuelle, SimulierteMaschinenDatenQuelle>();
+
+        // Anzeigeverlauf (Spezifikation Teil B): langlebiger Singleton, überdauert
+        // Modulwechsel. IAuswertungsQuelle wird später durch eine PostgreSQL-
+        // Umsetzung ersetzt (Teil D, Stufe 2), ohne dass sich an MaschinenVerlaufsDienst
+        // oder den Modulen etwas ändert.
+        services.AddSingleton(verlaufsOptionen ?? new VerlaufsOptionen());
+        services.AddSingleton<IAuswertungsQuelle, SimulierteAuswertungsQuelle>();
+        services.AddSingleton<IVerlaufsDienst, MaschinenVerlaufsDienst>();
 
         return services;
     }

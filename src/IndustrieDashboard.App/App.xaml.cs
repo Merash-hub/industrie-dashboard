@@ -97,7 +97,8 @@ public partial class App : Application
                 builder.AddSerilog(dispose: true);
             });
 
-            services.AddInfrastruktur(sqliteDbPfad);
+            var verlaufsOptionen = konfiguration?.GetSection("Verlauf").Get<VerlaufsOptionen>() ?? new VerlaufsOptionen();
+            services.AddInfrastruktur(sqliteDbPfad, verlaufsOptionen);
             services.AddSingleton<IEventAggregator, EventAggregator>();
 
             switch (identitaetsanbieter)
@@ -150,6 +151,11 @@ public partial class App : Application
             // gerade angezeigt wird. Ein kurzlebiges Modul-ViewModel darf sie nicht
             // abschalten, nur wenn es selbst gerade nicht mehr angezeigt wird.
             _serviceProvider.GetRequiredService<IMaschinenDatenQuelle>().StartUeberwachung();
+
+            // Anzeigeverlauf (Spezifikation Teil B): gleicher Lebenszyklus wie die
+            // Überwachung - Start hier, Entsorgung automatisch über
+            // _serviceProvider.Dispose() in OnExit (MaschinenVerlaufsDienst ist IDisposable).
+            _serviceProvider.GetRequiredService<IVerlaufsDienst>().StarteErfassung();
 
             var mainWindow = _serviceProvider.GetRequiredService<MainWindow>();
             mainWindow.Show();
