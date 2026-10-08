@@ -47,6 +47,23 @@ public class AppDbContext : DbContext
             b.Property(a => a.BenutzerKennung).IsRequired().HasMaxLength(200);
             b.Property(a => a.Aktion).IsRequired().HasMaxLength(200);
         });
+
+        modelBuilder.Entity<KontrolleingriffAnforderung>(b =>
+        {
+            b.Property(a => a.Beschreibung).HasMaxLength(500);
+            b.Property(a => a.AusnahmeGrund).HasMaxLength(500);
+
+            // Gleichzeitigkeitsschutz: Status aendert sich bei jeder
+            // Zustandsaenderung dieser Anforderung (Angefordert/ZeugeAngefragt/
+            // ZeugeBestaetigt -> Freigegeben/Abgelehnt/Zurueckgezogen), ist also
+            // als Concurrency-Token selbsterklaerend und braucht keine
+            // zusaetzliche Versionsspalte. EF Core nimmt den beim Laden
+            // gelesenen Status mit in die WHERE-Klausel des UPDATE auf; hat
+            // zwischen Laden und Speichern eine andere Aktion den Status
+            // bereits geaendert, betrifft das UPDATE 0 Zeilen und EF Core wirft
+            // DbUpdateConcurrencyException (siehe KontrolleingriffService).
+            b.Property(a => a.Status).IsConcurrencyToken();
+        });
     }
 
     /// <summary>

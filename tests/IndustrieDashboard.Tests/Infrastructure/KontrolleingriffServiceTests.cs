@@ -354,6 +354,166 @@ public sealed class KontrolleingriffServiceTests : IDisposable
         Assert.Contains(Schichtleitung1.Kennung.Wert, freigabeEintrag.NeuerWert);
     }
 
+    // --- Härtung: Gleichzeitigkeitsschutz (Status als Concurrency-Token) ---
+
+    [Fact]
+    public async Task AblehnenAsync_AnforderungZwischenzeitlichAnderswoGeaendert_WirftGleichzeitigkeitskonflikt()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        // Simuliert eine zweite, schon länger offene Ansicht derselben
+        // Anforderung: geladen, als ihr Status noch "Angefordert" war.
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(_verbindung).Options;
+        var veralteterKontext = new AppDbContext(options);
+        _ = await veralteterKontext.KontrolleingriffAnforderungen.SingleAsync(a => a.Id == anforderung.Id);
+
+        // Eine andere, unabhängige Aktion schließt die Anforderung in der
+        // Zwischenzeit bereits ab.
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        await _service.FreigebenAsync(anforderung.Id);
+
+        // Dieselbe (veraltete) Ansicht versucht jetzt abzulehnen: Wegen EF
+        // Cores Identity Map liest der Dienst über denselben Kontext weiterhin
+        // den im Tracker gehaltenen, veralteten Status "Angefordert" - die
+        // Prüfungen lassen die Aktion zu, aber das Speichern scheitert am
+        // Concurrency-Token (Status in der Datenbank ist längst "Freigegeben").
+        var einmaligerKontextMitVeraltetemStand = new EinmalVeralteterKontextFactory(options, veralteterKontext);
+        var dienstMitVeralteterAnsicht = new KontrolleingriffService(einmaligerKontextMitVeraltetemStand, _benutzerKontext);
+
+        var ausnahme = await Assert.ThrowsAsync<GleichzeitigkeitskonfliktException>(
+            () => dienstMitVeralteterAnsicht.AblehnenAsync(anforderung.Id, "Zu spät"));
+
+        Assert.Contains("gleichzeitig", ausnahme.Message, StringComparison.OrdinalIgnoreCase);
+
+        var audit = await AuditEintraegeAsync();
+        Assert.Contains(audit, e => e.Kategorie == AuditKategorie.ZugriffVerweigert && e.Aktion == "Kontrolleingriff abgelehnt");
+
+        // Die zuerst abgeschlossene Aktion bleibt gültig.
+        var endstand = await _service.GetAlleAnforderungenAsync();
+        Assert.Equal(KontrolleingriffStatus.Freigegeben, endstand.Single(a => a.Id == anforderung.Id).Status);
+    }
+
+    // --- Härtung: Berechtigung vor dem Laden (kein Erraten vorhandener Ids) ---
+
+    [Fact]
+    public async Task FreigebenAsync_OhneBerechtigungAufNichtExistierendeId_WirftNichtBerechtigtNichtNichtGefunden()
+    {
+        AlsBenutzer(Bediener1, Rolle.Bediener);
+
+        var ausnahme = await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.FreigebenAsync(anforderungId: 999999));
+
+        Assert.DoesNotContain("gefunden", ausnahme.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ZurueckziehenAsync_OhneBerechtigungAufNichtExistierendeId_WirftNichtBerechtigtNichtNichtGefunden()
+    {
+        // Administration ist die einzige Rolle ohne KontrolleingriffAnfordern.
+        AlsBenutzer(Administration1, Rolle.Administration);
+
+        var ausnahme = await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.ZurueckziehenAsync(anforderungId: 999999));
+
+        Assert.DoesNotContain("gefunden", ausnahme.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AlsZeugeBestaetigenAsync_OhneBerechtigungAufNichtExistierendeId_WirftNichtBerechtigtNichtNichtGefunden()
+    {
+        AlsBenutzer(Bediener1, Rolle.Bediener);
+
+        var ausnahme = await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.AlsZeugeBestaetigenAsync(anforderungId: 999999));
+
+        Assert.DoesNotContain("gefunden", ausnahme.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // --- Härtung: Längenbegrenzung (ablehnen statt abschneiden) ---
+
+    [Fact]
+    public async Task AnfordernAsync_ZuLangeBeschreibung_WirftArgumentExceptionUndLegtNichtsAn()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var zuLang = new string('x', 501);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.AnfordernAsync(1, zuLang));
+
+        var alle = await _service.GetAlleAnforderungenAsync();
+        Assert.Empty(alle);
+    }
+
+    [Fact]
+    public async Task AnfordernAsync_BeschreibungGenau500Zeichen_IstErlaubt()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var genauRichtig = new string('x', 500);
+
+        var anforderung = await _service.AnfordernAsync(1, genauRichtig);
+
+        Assert.Equal(genauRichtig, anforderung.Beschreibung);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("ab")]
+    [InlineData("  ab  ")]
+    public async Task FreigabeMitZeugeAnfordernAsync_GrundNachTrimZuKurz_WirftVierAugenVerletzung(string zuKurzerGrund)
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, zuKurzerGrund));
+    }
+
+    [Fact]
+    public async Task FreigabeMitZeugeAnfordernAsync_GrundZuLang_WirftVierAugenVerletzung()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+        var zuLang = new string('x', 501);
+
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, zuLang));
+    }
+
+    [Fact]
+    public async Task FreigabeMitZeugeAnfordernAsync_GrundWirdGetrimmtGespeichert()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+
+        var ergebnis = await _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "  Alleinbesetzung  ");
+
+        Assert.Equal("Alleinbesetzung", ergebnis.AusnahmeGrund);
+    }
+
+    private sealed class EinmalVeralteterKontextFactory : IDbContextFactory<AppDbContext>
+    {
+        private readonly DbContextOptions<AppDbContext> _options;
+        private AppDbContext? _veralteterKontext;
+
+        public EinmalVeralteterKontextFactory(DbContextOptions<AppDbContext> options, AppDbContext veralteterKontext)
+        {
+            _options = options;
+            _veralteterKontext = veralteterKontext;
+        }
+
+        public AppDbContext CreateDbContext()
+        {
+            if (_veralteterKontext is { } kontext)
+            {
+                _veralteterKontext = null;
+                return kontext;
+            }
+
+            return new AppDbContext(_options);
+        }
+    }
+
     private sealed class TestDbContextFactory : IDbContextFactory<AppDbContext>
     {
         private readonly DbContextOptions<AppDbContext> _options;

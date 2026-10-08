@@ -18,10 +18,21 @@ namespace IndustrieDashboard.Infrastructure.Services;
 /// <see cref="AppDbContext"/> verfolgt und mit einem gemeinsamen
 /// <c>SaveChangesAsync</c> gespeichert, was EF Core intern bereits atomar in
 /// einer Transaktion ausführt.
+///
+/// Reihenfolge in jeder Aktion: Zuerst die generische Berechtigung prüfen,
+/// erst danach die Anforderung per Id laden. So erfährt eine Person ohne
+/// jede Berechtigung nie, ob eine bestimmte Anforderungsnummer überhaupt
+/// existiert (Härtung).
 /// </summary>
 public class KontrolleingriffService : IKontrolleingriffService
 {
     private static readonly TimeSpan StandardZeugenBestaetigungGueltigkeit = TimeSpan.FromMinutes(15);
+
+    /// <summary>Härtung: Freitext-Felder werden abgelehnt, nicht abgeschnitten, wenn sie das überschreiten.</summary>
+    private const int MaxLaengeText = 500;
+
+    /// <summary>Härtung: Der Pflichtgrund für die Freigabe mit Zeuge muss inhaltlich sein, nicht nur nicht-leer.</summary>
+    private const int MindestlaengeAusnahmeGrund = 5;
 
     private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly IBenutzerKontext _benutzerKontext;
@@ -39,6 +50,8 @@ public class KontrolleingriffService : IKontrolleingriffService
 
     public async Task<KontrolleingriffAnforderung> AnfordernAsync(int maschineId, string beschreibung, CancellationToken ct = default)
     {
+        PruefeLaenge(beschreibung, nameof(beschreibung), "Die Beschreibung");
+
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
         var zielobjekt = $"Maschine #{maschineId}";
@@ -69,6 +82,8 @@ public class KontrolleingriffService : IKontrolleingriffService
             Zielobjekt = zielobjekt,
             NeuerWert = beschreibung
         });
+        // Anlegen ist ein reines INSERT: kein bestehender Concurrency-Token,
+        // an dem ein Konflikt auftreten könnte.
         await db.SaveChangesAsync(ct);
 
         return anforderung;
@@ -79,19 +94,17 @@ public class KontrolleingriffService : IKontrolleingriffService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
 
-        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
-            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
-
-        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
-
         if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffFreigeben))
         {
-            throw await VerweigereAsync(db, "Kontrolleingriff freigegeben", zielobjekt,
+            throw await VerweigereAsync(db, "Kontrolleingriff freigegeben", $"Anforderung #{anforderungId}",
                 "Keine Berechtigung zum Freigeben (nur Instandhaltung).",
                 grund => new NichtBerechtigtException(grund), ct);
         }
 
-        if (anforderung.Status is KontrolleingriffStatus.Freigegeben or KontrolleingriffStatus.Abgelehnt)
+        var anforderung = await LadeAsync(db, anforderungId, ct);
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
+
+        if (IstAbgeschlossen(anforderung.Status))
         {
             throw await VerweigereAsync(db, "Kontrolleingriff freigegeben", zielobjekt,
                 $"Anforderung #{anforderungId} ist bereits abgeschlossen (Status {anforderung.Status}); kein doppeltes Freigeben.",
@@ -157,8 +170,7 @@ public class KontrolleingriffService : IKontrolleingriffService
             });
         }
 
-        await db.SaveChangesAsync(ct);
-        return anforderung;
+        return await SpeichereMitGleichzeitigkeitsschutzAsync(db, anforderung, "Kontrolleingriff freigegeben", zielobjekt, ct);
     }
 
     public async Task<KontrolleingriffAnforderung> AblehnenAsync(int anforderungId, string? begruendung, CancellationToken ct = default)
@@ -166,19 +178,17 @@ public class KontrolleingriffService : IKontrolleingriffService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
 
-        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
-            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
-
-        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
-
         if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffAblehnen))
         {
-            throw await VerweigereAsync(db, "Kontrolleingriff abgelehnt", zielobjekt,
+            throw await VerweigereAsync(db, "Kontrolleingriff abgelehnt", $"Anforderung #{anforderungId}",
                 "Keine Berechtigung zum Ablehnen (nur Instandhaltung).",
                 grund => new NichtBerechtigtException(grund), ct);
         }
 
-        if (anforderung.Status is KontrolleingriffStatus.Freigegeben or KontrolleingriffStatus.Abgelehnt)
+        var anforderung = await LadeAsync(db, anforderungId, ct);
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
+
+        if (IstAbgeschlossen(anforderung.Status))
         {
             throw await VerweigereAsync(db, "Kontrolleingriff abgelehnt", zielobjekt,
                 $"Anforderung #{anforderungId} ist bereits abgeschlossen (Status {anforderung.Status}).",
@@ -207,8 +217,7 @@ public class KontrolleingriffService : IKontrolleingriffService
             Begruendung = begruendung
         });
 
-        await db.SaveChangesAsync(ct);
-        return anforderung;
+        return await SpeichereMitGleichzeitigkeitsschutzAsync(db, anforderung, "Kontrolleingriff abgelehnt", zielobjekt, ct);
     }
 
     public async Task<KontrolleingriffAnforderung> ZurueckziehenAsync(int anforderungId, CancellationToken ct = default)
@@ -216,17 +225,15 @@ public class KontrolleingriffService : IKontrolleingriffService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
 
-        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
-            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
-
-        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
-
         if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffAnfordern))
         {
-            throw await VerweigereAsync(db, "Kontrolleingriff zurückgezogen", zielobjekt,
+            throw await VerweigereAsync(db, "Kontrolleingriff zurückgezogen", $"Anforderung #{anforderungId}",
                 "Keine Berechtigung, einen Kontrolleingriff anzufordern bzw. zurückzuziehen.",
                 grund => new NichtBerechtigtException(grund), ct);
         }
+
+        var anforderung = await LadeAsync(db, anforderungId, ct);
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
 
         // Bewusst keine Vier-Augen-Prüfung: Zurückziehen ist die Rücknahme der
         // eigenen, noch nicht entschiedenen Anforderung, kein Freigeben/Ablehnen.
@@ -258,8 +265,7 @@ public class KontrolleingriffService : IKontrolleingriffService
             NeuerWert = "Zurückgezogen"
         });
 
-        await db.SaveChangesAsync(ct);
-        return anforderung;
+        return await SpeichereMitGleichzeitigkeitsschutzAsync(db, anforderung, "Kontrolleingriff zurückgezogen", zielobjekt, ct);
     }
 
     public async Task<KontrolleingriffAnforderung> FreigabeMitZeugeAnfordernAsync(int anforderungId, string ausnahmeGrund, CancellationToken ct = default)
@@ -267,17 +273,15 @@ public class KontrolleingriffService : IKontrolleingriffService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
 
-        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
-            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
-
-        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
-
         if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffFreigeben))
         {
-            throw await VerweigereAsync(db, "Freigabe mit Zeuge angefordert", zielobjekt,
+            throw await VerweigereAsync(db, "Freigabe mit Zeuge angefordert", $"Anforderung #{anforderungId}",
                 "Keine Berechtigung zum Freigeben; nur Instandhaltung darf den Zeugenpfad nutzen.",
                 grund => new NichtBerechtigtException(grund), ct);
         }
+
+        var anforderung = await LadeAsync(db, anforderungId, ct);
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
 
         if (!string.Equals(anforderung.AngefordertVonKennung, aktueller.Kennung.Wert, StringComparison.Ordinal))
         {
@@ -293,18 +297,28 @@ public class KontrolleingriffService : IKontrolleingriffService
                 grund => new InvalidOperationException(grund), ct);
         }
 
-        if (string.IsNullOrWhiteSpace(ausnahmeGrund))
+        // Pflichtgrund-Prüfungen bewusst alle als VierAugenVerletzung: Sie
+        // gehören zusammen zur Integrität des Zeugenpfads (ein Grund muss da
+        // UND inhaltlich UND nicht überlang sein), nicht zu allgemeiner
+        // Eingabevalidierung.
+        var getrimmterGrund = ausnahmeGrund?.Trim() ?? string.Empty;
+
+        if (getrimmterGrund.Length < MindestlaengeAusnahmeGrund)
         {
-            // Kein eigener Ausnahmefall in der Spezifikation benannt; da der
-            // Pflichtgrund Teil der Zeugenpfad-Integritaet ist, ordnen wir ihn
-            // wie die anderen Zeugenpfad-Verstoesse als VierAugenVerletzung ein.
             throw await VerweigereAsync(db, "Freigabe mit Zeuge angefordert", zielobjekt,
-                "Für die Freigabe mit Zeuge ist ein Grund Pflicht (z. B. 'Alleinbesetzung').",
+                $"Für die Freigabe mit Zeuge ist ein Grund mit mindestens {MindestlaengeAusnahmeGrund} Zeichen Pflicht (z. B. 'Alleinbesetzung').",
+                grund => new VierAugenVerletzungException(grund), ct);
+        }
+
+        if (getrimmterGrund.Length > MaxLaengeText)
+        {
+            throw await VerweigereAsync(db, "Freigabe mit Zeuge angefordert", zielobjekt,
+                $"Der Grund für die Freigabe mit Zeuge darf höchstens {MaxLaengeText} Zeichen lang sein.",
                 grund => new VierAugenVerletzungException(grund), ct);
         }
 
         anforderung.Status = KontrolleingriffStatus.ZeugeAngefragt;
-        anforderung.AusnahmeGrund = ausnahmeGrund;
+        anforderung.AusnahmeGrund = getrimmterGrund;
 
         db.AuditLogEintraege.Add(new AuditLogEintrag
         {
@@ -313,11 +327,10 @@ public class KontrolleingriffService : IKontrolleingriffService
             Kategorie = AuditKategorie.Kontrolleingriff,
             Aktion = "Freigabe mit Zeuge angefordert",
             Zielobjekt = zielobjekt,
-            Begruendung = ausnahmeGrund
+            Begruendung = getrimmterGrund
         });
 
-        await db.SaveChangesAsync(ct);
-        return anforderung;
+        return await SpeichereMitGleichzeitigkeitsschutzAsync(db, anforderung, "Freigabe mit Zeuge angefordert", zielobjekt, ct);
     }
 
     public async Task<KontrolleingriffAnforderung> AlsZeugeBestaetigenAsync(int anforderungId, CancellationToken ct = default)
@@ -325,17 +338,15 @@ public class KontrolleingriffService : IKontrolleingriffService
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
         var aktueller = _benutzerKontext.AktuellerBenutzer;
 
-        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
-            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
-
-        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
-
         if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffAlsZeugeBestaetigen))
         {
-            throw await VerweigereAsync(db, "Als Zeuge bestätigt", zielobjekt,
+            throw await VerweigereAsync(db, "Als Zeuge bestätigt", $"Anforderung #{anforderungId}",
                 "Keine Berechtigung, als Zeuge zu bestätigen (nur Schichtleitung).",
                 grund => new NichtBerechtigtException(grund), ct);
         }
+
+        var anforderung = await LadeAsync(db, anforderungId, ct);
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
 
         if (anforderung.Status != KontrolleingriffStatus.ZeugeAngefragt)
         {
@@ -366,8 +377,7 @@ public class KontrolleingriffService : IKontrolleingriffService
             Begruendung = anforderung.AusnahmeGrund
         });
 
-        await db.SaveChangesAsync(ct);
-        return anforderung;
+        return await SpeichereMitGleichzeitigkeitsschutzAsync(db, anforderung, "Als Zeuge bestätigt", zielobjekt, ct);
     }
 
     public async Task<IReadOnlyList<KontrolleingriffAnforderung>> GetOffeneAnforderungenAsync(CancellationToken ct = default)
@@ -388,6 +398,73 @@ public class KontrolleingriffService : IKontrolleingriffService
             .OrderByDescending(a => a.AngefordertAm)
             .Take(maxAnzahl)
             .ToListAsync(ct);
+    }
+
+    private static bool IstAbgeschlossen(KontrolleingriffStatus status) =>
+        status is KontrolleingriffStatus.Freigegeben or KontrolleingriffStatus.Abgelehnt or KontrolleingriffStatus.Zurueckgezogen;
+
+    /// <summary>
+    /// Lädt die Anforderung erst, NACHDEM die aufrufende Methode die
+    /// generische Berechtigung geprüft hat (Härtung): Wer die Berechtigung
+    /// nicht hat, bekommt dieselbe Verweigerung unabhängig davon, ob die Id
+    /// überhaupt existiert, und kann so nicht über die Fehlermeldung
+    /// vorhandene Anforderungsnummern erraten.
+    /// </summary>
+    private static async Task<KontrolleingriffAnforderung> LadeAsync(AppDbContext db, int anforderungId, CancellationToken ct) =>
+        await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
+            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
+
+    private static void PruefeLaenge(string? wert, string parameterName, string feldbezeichnung)
+    {
+        if (wert is not null && wert.Length > MaxLaengeText)
+        {
+            throw new ArgumentException($"{feldbezeichnung} darf höchstens {MaxLaengeText} Zeichen lang sein.", parameterName);
+        }
+    }
+
+    /// <summary>
+    /// Speichert die Änderung und fängt dabei einen Gleichzeitigkeitskonflikt
+    /// ab: Hat eine andere Aktion den Status derselben Anforderung zwischen
+    /// Laden und Speichern bereits geändert (Status ist Concurrency-Token,
+    /// siehe AppDbContext), betrifft das UPDATE null Zeilen und EF Core wirft
+    /// <see cref="DbUpdateConcurrencyException"/>. Die Verweigerung wird über
+    /// einen frischen Kontext protokolliert, weil <paramref name="db"/> nach
+    /// dem fehlgeschlagenen Speichern eine inkonsistente, nicht erneut
+    /// speicherbare Änderung verfolgt.
+    /// </summary>
+    private async Task<KontrolleingriffAnforderung> SpeichereMitGleichzeitigkeitsschutzAsync(
+        AppDbContext db,
+        KontrolleingriffAnforderung anforderung,
+        string aktion,
+        string zielobjekt,
+        CancellationToken ct)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return anforderung;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            var grund =
+                $"Anforderung #{anforderung.Id} wurde zwischenzeitlich von einer anderen Aktion geändert " +
+                "(gleichzeitiger Zugriff); diese Aktion wurde nicht ausgeführt. Bitte neu laden und erneut versuchen.";
+
+            var aktueller = _benutzerKontext.AktuellerBenutzer;
+            await using var auditDb = await _dbContextFactory.CreateDbContextAsync(ct);
+            auditDb.AuditLogEintraege.Add(new AuditLogEintrag
+            {
+                Benutzer = aktueller.Anzeigename,
+                BenutzerKennung = aktueller.Kennung.Wert,
+                Kategorie = AuditKategorie.ZugriffVerweigert,
+                Aktion = aktion,
+                Zielobjekt = zielobjekt,
+                Begruendung = grund
+            });
+            await auditDb.SaveChangesAsync(ct);
+
+            throw new GleichzeitigkeitskonfliktException(grund);
+        }
     }
 
     /// <summary>
