@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using IndustrieDashboard.Core.Enums;
 using IndustrieDashboard.Core.Interfaces;
 using IndustrieDashboard.Shared.Events;
 using IndustrieDashboard.Shared.Mvvm;
@@ -19,6 +20,7 @@ public class DashboardViewModel : ViewModelBase, IDisposable
 
     private readonly IMaschinenDatenQuelle _maschinenDatenQuelle;
     private readonly IKontrolleingriffService _kontrolleingriffService;
+    private readonly IBenutzerKontext _benutzerKontext;
     private readonly IEventAggregator _eventAggregator;
     private readonly ObservableCollection<double> _auslastungsVerlauf = new();
 
@@ -29,10 +31,12 @@ public class DashboardViewModel : ViewModelBase, IDisposable
     public DashboardViewModel(
         IMaschinenDatenQuelle maschinenDatenQuelle,
         IKontrolleingriffService kontrolleingriffService,
+        IBenutzerKontext benutzerKontext,
         IEventAggregator eventAggregator)
     {
         _maschinenDatenQuelle = maschinenDatenQuelle;
         _kontrolleingriffService = kontrolleingriffService;
+        _benutzerKontext = benutzerKontext;
         _eventAggregator = eventAggregator;
 
         AuslastungsSerien = new ObservableCollection<ISeries>
@@ -46,9 +50,12 @@ public class DashboardViewModel : ViewModelBase, IDisposable
             }
         };
 
-        KontrolleingriffAnfordernCommand = new AsyncRelayCommand(KontrolleingriffAnfordernAsync, () => AusgewaehlteMaschine is not null);
+        KontrolleingriffAnfordernCommand = new AsyncRelayCommand(
+            KontrolleingriffAnfordernAsync,
+            () => AusgewaehlteMaschine is not null && DarfKontrolleingriffAnfordern);
 
         _maschinenDatenQuelle.WertAktualisiert += OnWertAktualisiert;
+        _benutzerKontext.BenutzerGewechselt += OnBenutzerGewechselt;
     }
 
     public ObservableCollection<MaschineViewModel> Maschinen { get; } = new();
@@ -72,6 +79,13 @@ public class DashboardViewModel : ViewModelBase, IDisposable
         get => _statusMeldung;
         private set => SetProperty(ref _statusMeldung, value);
     }
+
+    public bool DarfKontrolleingriffAnfordern => _benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffAnfordern);
+
+    /// <summary>Tooltip-Grund, wenn die Schaltfläche wegen fehlender Berechtigung deaktiviert ist (Spezifikation A10).</summary>
+    public string KontrolleingriffAnfordernHinweis => DarfKontrolleingriffAnfordern
+        ? string.Empty
+        : "Keine Berechtigung, einen Kontrolleingriff anzufordern.";
 
     public AsyncRelayCommand KontrolleingriffAnfordernCommand { get; }
 
@@ -141,8 +155,16 @@ public class DashboardViewModel : ViewModelBase, IDisposable
         });
     }
 
+    private void OnBenutzerGewechselt(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(DarfKontrolleingriffAnfordern));
+        OnPropertyChanged(nameof(KontrolleingriffAnfordernHinweis));
+        KontrolleingriffAnfordernCommand.RaiseCanExecuteChanged();
+    }
+
     public void Dispose()
     {
         _maschinenDatenQuelle.WertAktualisiert -= OnWertAktualisiert;
+        _benutzerKontext.BenutzerGewechselt -= OnBenutzerGewechselt;
     }
 }

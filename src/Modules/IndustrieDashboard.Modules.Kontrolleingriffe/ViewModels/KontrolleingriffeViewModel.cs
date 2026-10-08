@@ -7,9 +7,10 @@ using IndustrieDashboard.Shared.Mvvm;
 namespace IndustrieDashboard.Modules.Kontrolleingriffe.ViewModels;
 
 /// <summary>
-/// ViewModel des Kontrolleingriffe-Moduls: Freigabe/Ablehnung offener
-/// Anforderungen nach dem Vier-Augen-Prinzip sowie Einsicht in den
-/// vollständigen Audit-Trail.
+/// ViewModel des Kontrolleingriffe-Moduls: Anfordern/Zurückziehen,
+/// Freigabe/Ablehnung nach dem Vier-Augen-Prinzip, der Zeugenpfad bei
+/// Alleinbesetzung der Instandhaltung (Spezifikation A6) sowie Einsicht in
+/// den vollständigen Audit-Trail.
 /// </summary>
 public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 {
@@ -43,6 +44,9 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
         FreigebenCommand = new AsyncRelayCommand(FreigebenAsync, p => p is AnforderungViewModel);
         AblehnenCommand = new AsyncRelayCommand(AblehnenAsync, p => p is AnforderungViewModel);
+        ZurueckziehenCommand = new AsyncRelayCommand(ZurueckziehenAsync, p => p is AnforderungViewModel);
+        FreigabeMitZeugeCommand = new AsyncRelayCommand(FreigabeMitZeugeAsync, p => p is AnforderungViewModel);
+        AlsZeugeBestaetigenCommand = new AsyncRelayCommand(AlsZeugeBestaetigenAsync, p => p is AnforderungViewModel);
         AktualisierenCommand = new AsyncRelayCommand(AktualisierenAsync);
 
         _benutzerKontext.BenutzerGewechselt += OnBenutzerGewechselt;
@@ -100,6 +104,12 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
     public AsyncRelayCommand AblehnenCommand { get; }
 
+    public AsyncRelayCommand ZurueckziehenCommand { get; }
+
+    public AsyncRelayCommand FreigabeMitZeugeCommand { get; }
+
+    public AsyncRelayCommand AlsZeugeBestaetigenCommand { get; }
+
     public AsyncRelayCommand AktualisierenCommand { get; }
 
     /// <summary>Wird beim ersten Anzeigen der View aufgerufen (aus dem Code-Behind).</summary>
@@ -123,7 +133,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
         OffeneAnforderungen.Clear();
         foreach (var anforderung in offene.OrderByDescending(a => a.AngefordertAm))
         {
-            OffeneAnforderungen.Add(new AnforderungViewModel(anforderung, _aktuellerBenutzer));
+            OffeneAnforderungen.Add(new AnforderungViewModel(anforderung, _benutzerKontext));
         }
 
         OnPropertyChanged(nameof(OffeneAnforderungenVorhanden));
@@ -138,7 +148,31 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private async Task FreigebenAsync(object? parameter)
+    private async Task FreigebenAsync(object? parameter) =>
+        await AktionAusfuehrenAsync(parameter, "freigegeben", "Freigeben",
+            anforderungVm => _kontrolleingriffService.FreigebenAsync(anforderungVm.Id));
+
+    private async Task AblehnenAsync(object? parameter) =>
+        await AktionAusfuehrenAsync(parameter, "abgelehnt", "Ablehnen",
+            anforderungVm => _kontrolleingriffService.AblehnenAsync(anforderungVm.Id, begruendung: null));
+
+    private async Task ZurueckziehenAsync(object? parameter) =>
+        await AktionAusfuehrenAsync(parameter, "zurückgezogen", "Zurückziehen",
+            anforderungVm => _kontrolleingriffService.ZurueckziehenAsync(anforderungVm.Id));
+
+    private async Task FreigabeMitZeugeAsync(object? parameter) =>
+        await AktionAusfuehrenAsync(parameter, "mit Zeuge angefordert", "Freigabe mit Zeuge anfordern",
+            anforderungVm => _kontrolleingriffService.FreigabeMitZeugeAnfordernAsync(anforderungVm.Id, anforderungVm.AusnahmeGrundEingabe));
+
+    private async Task AlsZeugeBestaetigenAsync(object? parameter) =>
+        await AktionAusfuehrenAsync(parameter, "als Zeuge bestätigt", "Zeugenbestätigung",
+            anforderungVm => _kontrolleingriffService.AlsZeugeBestaetigenAsync(anforderungVm.Id));
+
+    private async Task AktionAusfuehrenAsync(
+        object? parameter,
+        string vergangenheitsform,
+        string fehlerBezeichnung,
+        Func<AnforderungViewModel, Task<KontrolleingriffAnforderung>> aktion)
     {
         if (parameter is not AnforderungViewModel anforderungVm)
         {
@@ -149,35 +183,9 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var anforderung = await _kontrolleingriffService.FreigebenAsync(anforderungVm.Id);
+            var anforderung = await aktion(anforderungVm);
 
-            StatusMeldung = $"Kontrolleingriff #{anforderung.Id} freigegeben.";
-
-            _eventAggregator.Publish(new KontrolleingriffStatusGeaendertEvent(
-                anforderung.Id, anforderung.MaschineId, anforderung.Status));
-
-            await LadenAsync();
-        }
-        catch (Exception ex)
-        {
-            StatusMeldung = $"Fehler beim Freigeben: {ex.Message}";
-        }
-    }
-
-    private async Task AblehnenAsync(object? parameter)
-    {
-        if (parameter is not AnforderungViewModel anforderungVm)
-        {
-            return;
-        }
-
-        AusgewaehlteAnforderung = anforderungVm;
-
-        try
-        {
-            var anforderung = await _kontrolleingriffService.AblehnenAsync(anforderungVm.Id, begruendung: null);
-
-            StatusMeldung = $"Kontrolleingriff #{anforderung.Id} abgelehnt.";
+            StatusMeldung = $"Kontrolleingriff #{anforderung.Id} {vergangenheitsform}.";
 
             _eventAggregator.Publish(new KontrolleingriffStatusGeaendertEvent(
                 anforderung.Id, anforderung.MaschineId, anforderung.Status));
@@ -186,7 +194,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex)
         {
-            StatusMeldung = $"Fehler beim Ablehnen: {ex.Message}";
+            StatusMeldung = $"Fehler bei '{fehlerBezeichnung}': {ex.Message}";
         }
     }
 
@@ -209,7 +217,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
         foreach (var anforderung in OffeneAnforderungen)
         {
-            anforderung.AktualisiereDarfFreigeben(_aktuellerBenutzer);
+            anforderung.Aktualisiere();
         }
     }
 

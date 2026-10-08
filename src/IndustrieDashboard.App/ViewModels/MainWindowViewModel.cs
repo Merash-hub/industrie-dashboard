@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using IndustrieDashboard.Core.Interfaces;
 using IndustrieDashboard.Shared.Modules;
 using IndustrieDashboard.Shared.Mvvm;
 using Microsoft.Extensions.DependencyInjection;
@@ -8,18 +9,22 @@ namespace IndustrieDashboard.App.ViewModels;
 /// <summary>
 /// ViewModel der Shell (MainWindow). Kennt nur die Liste der Module und deren
 /// Metadaten - welche fachlichen Views dahinterstecken, ist der Shell egal
-/// (siehe IAppModule.ErzeugeStartView).
+/// (siehe IAppModule.ErzeugeStartView). Zeigt zusätzlich die Kopfzeile mit
+/// Anzeigename und Rollen (Spezifikation A10) - reine Information, keine
+/// Schutzfunktion; die Dienste prüfen jede Aktion unabhängig selbst.
 /// </summary>
 public class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly IBenutzerKontext _benutzerKontext;
     private object? _aktuelleAnsicht;
     private NavigationEintrag? _ausgewaehlterEintrag;
     private IServiceScope? _aktuellerModulScope;
 
-    public MainWindowViewModel(IServiceProvider serviceProvider, IReadOnlyList<IAppModule> module)
+    public MainWindowViewModel(IServiceProvider serviceProvider, IReadOnlyList<IAppModule> module, IBenutzerKontext benutzerKontext)
     {
         _serviceProvider = serviceProvider;
+        _benutzerKontext = benutzerKontext;
 
         foreach (var modul in module.OrderBy(m => m.Reihenfolge))
         {
@@ -27,9 +32,17 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         }
 
         AusgewaehlterEintrag = NavigationEintraege.FirstOrDefault();
+
+        _benutzerKontext.BenutzerGewechselt += OnBenutzerGewechselt;
     }
 
     public ObservableCollection<NavigationEintrag> NavigationEintraege { get; } = new();
+
+    public string AngemeldeterBenutzer => _benutzerKontext.AktuellerBenutzer.Anzeigename;
+
+    public string RollenAnzeige => _benutzerKontext.Rollen.Count == 0
+        ? "Keine Rolle zugewiesen"
+        : string.Join(", ", _benutzerKontext.Rollen.Select(r => r.ToString()).OrderBy(r => r));
 
     public object? AktuelleAnsicht
     {
@@ -68,9 +81,16 @@ public class MainWindowViewModel : ViewModelBase, IDisposable
         vorherigerScope?.Dispose();
     }
 
+    private void OnBenutzerGewechselt(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(AngemeldeterBenutzer));
+        OnPropertyChanged(nameof(RollenAnzeige));
+    }
+
     /// <summary>Wird beim Beenden der Anwendung über den DI-Container aufgerufen (siehe App.xaml.cs).</summary>
     public void Dispose()
     {
+        _benutzerKontext.BenutzerGewechselt -= OnBenutzerGewechselt;
         _aktuellerModulScope?.Dispose();
     }
 }

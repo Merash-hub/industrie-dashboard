@@ -77,6 +77,8 @@
                     <Button Content="Not-Stopp anfordern"
                             Style="{StaticResource MaterialDesignRaisedButton}"
                             Command="{Binding KontrolleingriffAnfordernCommand}"
+                            ToolTip="{Binding KontrolleingriffAnfordernHinweis}"
+                            ToolTipService.ShowOnDisabled="True"
                             Margin="0,16,0,0" />
                     <TextBlock Text="{Binding StatusMeldung}" Margin="0,16,0,0" TextWrapping="Wrap" FontSize="12" />
                 </StackPanel>

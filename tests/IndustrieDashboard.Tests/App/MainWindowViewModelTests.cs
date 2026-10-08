@@ -47,7 +47,7 @@ public sealed class MainWindowViewModelTests : IDisposable
     [Fact]
     public void MehrfacherModulwechsel_HinterlaesstNurEinenAbonnentenProEreignis()
     {
-        var viewModel = new MainWindowViewModel(_serviceProvider, _module);
+        var viewModel = new MainWindowViewModel(_serviceProvider, _module, _benutzerKontext);
         var eintragA = viewModel.NavigationEintraege.Single(e => e.Modul == _module[0]);
         var eintragB = viewModel.NavigationEintraege.Single(e => e.Modul == _module[1]);
 
@@ -60,7 +60,10 @@ public sealed class MainWindowViewModelTests : IDisposable
         viewModel.AusgewaehlterEintrag = eintragB;
 
         Assert.Equal(1, _eventAggregator.AnzahlAbonnenten<KontrolleingriffStatusGeaendertEvent>());
-        Assert.Equal(1, _benutzerKontext.AnzahlBenutzerGewechseltAbonnenten);
+        // 2, nicht 1: MainWindowViewModel selbst abonniert jetzt dauerhaft für
+        // die Kopfzeile (Spezifikation A10), dazu kommt die eine Abonnentin
+        // des aktuell aktiven Moduls.
+        Assert.Equal(2, _benutzerKontext.AnzahlBenutzerGewechseltAbonnenten);
 
         viewModel.Dispose();
 
