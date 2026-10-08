@@ -12,12 +12,14 @@ Ausarbeitung – **nicht** als fertiges Produkt.
 | Solution-/Projektstruktur (modular, s. u.) | ✅ vollständig |
 | MVVM-Basis, RelayCommand, EventAggregator | ✅ vollständig, mit Tests |
 | Domänenmodell (Maschine, Schicht, Mitarbeiter, Audit-Log, Kontrolleingriff) | ✅ vollständig |
-| EF-Core-Datenkontext (SQLite) | ✅ vollständig (Schema per `EnsureCreated()`, echte Migrationen folgen) |
+| EF-Core-Datenkontext (SQLite) | ✅ vollständig, echte Migrationen (`Data/Migrations/`) |
 | Modulares Plug-in-System für Fachmodule (`IAppModule`) | ✅ vollständig |
-| **Dashboard-Modul** (Kacheln, Live-Chart, Kontrolleingriff-Demo) | ✅ **lauffähig** mit simulierten Maschinendaten |
-| Schichtplanung / Maschinenüberwachung / Kontrolleingriffe | 🔲 Grundgerüst/Platzhalter – nächste Ausbauschritte |
+| **Dashboard-Modul** (Kacheln, Live-Chart mit persistentem Anzeigeverlauf, Kontrolleingriff-Demo) | ✅ **lauffähig** mit simulierten Maschinendaten |
+| **Identität und Rollen** (Windows-Gruppen oder Prototyp-Benutzerwechsel, 5 Rollen, Vier-Augen-Prinzip inkl. Zeugenpfad) | ✅ **lauffähig**, siehe `docs/spec-identitaet-rollen.md` |
+| **Kontrolleingriffe-Modul** (Freigabe/Ablehnung/Zurückziehen, Zeugenpfad, Audit-Trail-Ansicht) | ✅ **lauffähig** |
+| Schichtplanung / Maschinenüberwachung | 🔲 Grundgerüst/Platzhalter – nächste Ausbauschritte |
 | OPC UA / MQTT / SignalR | 🔲 noch nicht angebunden (siehe unten) |
-| IdentityServer/Active Directory, TLS | 🔲 noch nicht angebunden |
+| Dauerhafte Messdatenspeicherung (PostgreSQL), Auswertungsansicht | 🔲 noch nicht angebunden (Spezifikation Teil D) |
 
 Die simulierte Maschinenanbindung (`SimulierteMaschinenDatenQuelle`) ist
 bewusst die **einzige** Stelle, die später durch echte OPC-UA-/MQTT-Clients
@@ -121,23 +123,32 @@ Das war's – Navigation und DI-Wiring übernimmt die Shell automatisch.
 - **Datenzugriff:** EF Core + SQLite lokal; der Wechsel/die Ergänzung um
   PostgreSQL für die zentrale Instanz ist ein zweiter `DbContext` mit
   `UseNpgsql(...)` statt `UseSqlite(...)` gegen dasselbe Modell.
-- **Migrationen:** Für den Prototyp erzeugt `EnsureCreated()` das Schema
-  direkt aus dem Modell. Sobald sich das Modell stabilisiert, sollte auf
-  echte EF-Core-Migrationen umgestellt werden: `dotnet ef migrations add InitialCreate --project src/IndustrieDashboard.Infrastructure --startup-project src/IndustrieDashboard.App`.
-- **Vier-Augen-Prinzip:** Im Dashboard-Modul bereits als End-to-End-Demo
-  nutzbar (Maschine auswählen → "Not-Stopp anfordern" → Anforderung landet
-  in `KontrolleingriffAnforderungen` + Audit-Log; `KontrolleingriffService.FreigebenAsync`
-  verweigert die Freigabe durch dieselbe Person, die angefordert hat).
+- **Migrationen:** Echte EF-Core-Migrationen (`src/IndustrieDashboard.Infrastructure/Data/Migrations/`).
+  `App.xaml.cs` ruft beim Start `Database.Migrate()` auf. Neue Migration:
+  `dotnet tool run dotnet-ef migrations add <Name> --project src/IndustrieDashboard.Infrastructure --startup-project src/IndustrieDashboard.Infrastructure --output-dir Data/Migrations`
+  (lokales Tool, einmalig `dotnet tool restore`).
+- **Identität und Rollen:** Zwei wählbare Anbieter (`Sicherheit:Identitaetsanbieter`
+  in `appsettings.json`): `Windows` (Rollen aus Windows-Gruppenmitgliedschaft,
+  Standard und einzige in Release-Builds zulässige Option) oder `Prototyp`
+  (fester Testbenutzer-Satz mit Benutzerwechsel in der Oberfläche, nur in
+  Debug-Builds). Fünf Rollen, zentrale Berechtigungsmatrix, Vier-Augen-Prinzip
+  nach Kennung (nicht nach Anzeigename) inkl. Zeugenpfad bei Alleinbesetzung
+  der Instandhaltung. Details: `docs/spec-identitaet-rollen.md`.
+- **Vier-Augen-Prinzip:** Im Dashboard- und Kontrolleingriffe-Modul nutzbar
+  (Maschine auswählen → "Not-Stopp anfordern" → Anforderung landet in
+  `KontrolleingriffAnforderungen` + Audit-Log; Freigabe/Ablehnung verweigert
+  dieselbe Person, die angefordert hat - geprüft über die stabile Kennung,
+  nicht über den Anzeigenamen).
 
 ## Noch offen (nächste Ausbauschritte)
 
 - Echte OPC-UA-/MQTT-Anbindung (ersetzt `SimulierteMaschinenDatenQuelle`)
 - SignalR für Live-Updates zwischen mehreren Clients
-- Schichtplanung: UI + Geschäftslogik
+- Schichtplanung: UI + Geschäftslogik, dazu Vertretungen (Spezifikation Teil C)
 - Maschinenüberwachung: Detailansicht je Maschine, Grenzwerte/Alarme
-- Kontrolleingriffe: UI für Freigabe-Liste + Audit-Log-Ansicht
-- Authentifizierung/Autorisierung (IdentityServer/Active Directory), TLS
-- Echte EF-Core-Migrationen statt `EnsureCreated()`
+- Dauerhafte Messdatenspeicherung in PostgreSQL, Auswertungsansicht mit
+  seltener Aktualisierung (Spezifikation Teil D)
+- Entra-ID-Anbindung (Abstraktion über `BenutzerKennung` vorbereitet, nicht gebaut)
 - CI-Pipeline (Azure DevOps), wie im Technologiestack vorgesehen
 
 ## Hinweis zur Entstehung dieses Prototyps
