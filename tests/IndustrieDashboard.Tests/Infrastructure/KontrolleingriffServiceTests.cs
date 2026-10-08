@@ -32,7 +32,7 @@ public sealed class KontrolleingriffServiceTests : IDisposable
 
         using (var initDb = new AppDbContext(options))
         {
-            initDb.SicherstellenErstelltMitAuditSchutz();
+            initDb.Database.Migrate();
         }
 
         var dbContextFactory = new TestDbContextFactory(options);

@@ -29,7 +29,7 @@ public sealed class AuditLogUnveraenderlichkeitTests : IDisposable
             .Options;
 
         _db = new AppDbContext(options);
-        _db.SicherstellenErstelltMitAuditSchutz();
+        _db.Database.Migrate();
     }
 
     public void Dispose()

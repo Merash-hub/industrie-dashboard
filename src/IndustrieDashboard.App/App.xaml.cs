@@ -80,14 +80,11 @@ public partial class App : Application
 
             _serviceProvider = services.BuildServiceProvider();
 
-            // Prototyp: Schema direkt aus dem EF-Core-Modell erzeugen. Sobald echte
-            // Migrationen existieren (dotnet ef migrations add ...), hier durch
-            // db.Database.Migrate() ersetzen.
             using (var scope = _serviceProvider.CreateScope())
             {
                 var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
                 using var db = dbContextFactory.CreateDbContext();
-                db.SicherstellenErstelltMitAuditSchutz();
+                db.Database.Migrate();
             }
 
             // Die Maschinenüberwachung ist ein geteilter Singleton-Dienst und gehört
