@@ -44,6 +44,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<AuditLogEintrag>(b =>
         {
             b.Property(a => a.Benutzer).IsRequired().HasMaxLength(200);
+            b.Property(a => a.BenutzerKennung).IsRequired().HasMaxLength(200);
             b.Property(a => a.Aktion).IsRequired().HasMaxLength(200);
         });
     }

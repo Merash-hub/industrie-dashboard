@@ -1,3 +1,5 @@
+using IndustrieDashboard.Core.Enums;
+
 namespace IndustrieDashboard.Core.Models;
 
 /// <summary>
@@ -15,6 +17,16 @@ public class AuditLogEintrag
     public DateTime Zeitstempel { get; init; } = DateTime.UtcNow;
 
     public required string Benutzer { get; init; }
+
+    /// <summary>
+    /// Stabile Kennung des handelnden Benutzers (siehe <see cref="BenutzerKennung"/>).
+    /// Im Unterschied zu <see cref="Benutzer"/> niemals für Sicherheitsentscheidungen
+    /// durch einen Namensvergleich ersetzbar; hier nur als Text gespeichert, weil
+    /// der Audit-Trail unveränderliche Rohdaten hält.
+    /// </summary>
+    public required string BenutzerKennung { get; init; }
+
+    public required AuditKategorie Kategorie { get; init; }
 
     public required string Aktion { get; init; }
 

@@ -10,6 +10,13 @@ namespace IndustrieDashboard.Infrastructure.Services;
 /// Referenzimplementierung des Vier-Augen-Prinzips: Anfordern und Freigeben
 /// sind zwei unabhängige Schritte durch (im Idealfall) zwei unterschiedliche
 /// Benutzer; jeder Schritt wird zusätzlich im Audit-Log festgehalten.
+///
+/// Zwischenstand (Auftrag Stufe 1, Schritt 3): Die Methoden nehmen weiterhin
+/// nur den Anzeigenamen entgegen, deshalb dient er hier vorübergehend auch als
+/// Platzhalter für <see cref="AuditLogEintrag.BenutzerKennung"/> bzw.
+/// <see cref="KontrolleingriffAnforderung.AngefordertVonKennung"/>. Schritt 4
+/// ersetzt das durch die echte, stabile Kennung aus <c>IBenutzerKontext</c>
+/// und macht das Vier-Augen-Prinzip kennungsbasiert statt namensbasiert.
 /// </summary>
 public class KontrolleingriffService : IKontrolleingriffService
 {
@@ -31,6 +38,7 @@ public class KontrolleingriffService : IKontrolleingriffService
             MaschineId = maschineId,
             Beschreibung = beschreibung,
             AngefordertVon = angefordertVon,
+            AngefordertVonKennung = angefordertVon,
             Status = KontrolleingriffStatus.Angefordert
         };
 
@@ -40,6 +48,8 @@ public class KontrolleingriffService : IKontrolleingriffService
         await _auditLogService.ProtokolliereAsync(new AuditLogEintrag
         {
             Benutzer = angefordertVon,
+            BenutzerKennung = angefordertVon,
+            Kategorie = AuditKategorie.Kontrolleingriff,
             Aktion = "Kontrolleingriff angefordert",
             Zielobjekt = $"Maschine #{maschineId}",
             NeuerWert = beschreibung
@@ -62,12 +72,15 @@ public class KontrolleingriffService : IKontrolleingriffService
 
         anforderung.Status = KontrolleingriffStatus.Freigegeben;
         anforderung.FreigegebenVon = freigegebenVon;
+        anforderung.FreigegebenVonKennung = freigegebenVon;
         anforderung.FreigegebenAm = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
 
         await _auditLogService.ProtokolliereAsync(new AuditLogEintrag
         {
             Benutzer = freigegebenVon,
+            BenutzerKennung = freigegebenVon,
+            Kategorie = AuditKategorie.Kontrolleingriff,
             Aktion = "Kontrolleingriff freigegeben",
             Zielobjekt = $"Maschine #{anforderung.MaschineId}",
             AlterWert = "Angefordert",
@@ -92,6 +105,8 @@ public class KontrolleingriffService : IKontrolleingriffService
         await _auditLogService.ProtokolliereAsync(new AuditLogEintrag
         {
             Benutzer = abgelehntVon,
+            BenutzerKennung = abgelehntVon,
+            Kategorie = AuditKategorie.Kontrolleingriff,
             Aktion = "Kontrolleingriff abgelehnt",
             Zielobjekt = $"Maschine #{anforderung.MaschineId}",
             AlterWert = vorherigerStatus.ToString(),

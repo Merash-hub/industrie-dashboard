@@ -1,3 +1,4 @@
+using IndustrieDashboard.Core.Enums;
 using IndustrieDashboard.Core.Models;
 using IndustrieDashboard.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
@@ -43,6 +44,8 @@ public sealed class AuditLogUnveraenderlichkeitTests : IDisposable
         var eintrag = new AuditLogEintrag
         {
             Benutzer = "Testbenutzer",
+            BenutzerKennung = "proto:test",
+            Kategorie = AuditKategorie.Kontrolleingriff,
             Aktion = "Testaktion",
             Zielobjekt = "Testobjekt"
         };
@@ -97,6 +100,32 @@ public sealed class AuditLogUnveraenderlichkeitTests : IDisposable
 
         var geladen = await _db.AuditLogEintraege.SingleAsync();
         Assert.Equal("Testaktion", geladen.Aktion);
+    }
+
+    [Fact]
+    public async Task RohesUpdateSql_AufNeuesFeldBenutzerKennung_ScheitertAmTrigger()
+    {
+        var id = await LegeEintragAnAsync();
+
+        await Assert.ThrowsAsync<SqliteException>(
+            () => _db.Database.ExecuteSqlRawAsync(
+                "UPDATE AuditLogEintraege SET BenutzerKennung = 'proto:manipuliert' WHERE Id = {0}", id));
+
+        var geladen = await _db.AuditLogEintraege.SingleAsync();
+        Assert.Equal("proto:test", geladen.BenutzerKennung);
+    }
+
+    [Fact]
+    public async Task RohesUpdateSql_AufNeuesFeldKategorie_ScheitertAmTrigger()
+    {
+        var id = await LegeEintragAnAsync();
+
+        await Assert.ThrowsAsync<SqliteException>(
+            () => _db.Database.ExecuteSqlRawAsync(
+                "UPDATE AuditLogEintraege SET Kategorie = {0} WHERE Id = {1}", (int)AuditKategorie.ZugriffVerweigert, id));
+
+        var geladen = await _db.AuditLogEintraege.SingleAsync();
+        Assert.Equal(AuditKategorie.Kontrolleingriff, geladen.Kategorie);
     }
 
     [Fact]
