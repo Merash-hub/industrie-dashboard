@@ -11,17 +11,36 @@ namespace IndustrieDashboard.Infrastructure.Services;
 /// fester Kennung und Rolle, zwischen denen sich ohne echte Anmeldung
 /// umschalten lässt. Wird später durch eine Active-Directory-/Entra-ID-
 /// Anbindung ersetzt, die nur noch IBenutzerKontext bedient.
+///
+/// Nur in Debug-Builds zulässig (Spezifikation A8): der Konstruktor
+/// verweigert sich in Release-Builds technisch, unabhängig davon, was die
+/// Konfiguration sagt. Die verständliche Meldung an den Benutzer und der
+/// Log-Eintrag beim Start gehören zur Anbieterwahl in <c>App.xaml.cs</c>.
 /// </summary>
 public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
 {
+    // Der zweite Instandhaltungs-Testbenutzer wird gebraucht, damit die
+    // Freigabe im Normalfall testbar bleibt; ohne ihn wird nur der
+    // Zeugenpfad getestet (Steven, Spezifikation A8).
     private static readonly IReadOnlyList<(Benutzer Benutzer, IReadOnlySet<Rolle> Rollen)> Testbenutzer = new List<(Benutzer, IReadOnlySet<Rolle>)>
     {
-        (new Benutzer(new BenutzerKennung("proto:steven"), "Steven Katzer (Bediener)"), RollenMenge(Rolle.Bediener)),
+        (new Benutzer(new BenutzerKennung("proto:steven"), "Steven Katzer (Maschineneinrichter)"), RollenMenge(Rolle.Maschineneinrichter)),
         (new Benutzer(new BenutzerKennung("proto:anna"), "Anna Weber (Schichtleitung)"), RollenMenge(Rolle.Schichtleitung)),
         (new Benutzer(new BenutzerKennung("proto:thomas"), "Thomas Krause (Instandhaltung)"), RollenMenge(Rolle.Instandhaltung)),
+        (new Benutzer(new BenutzerKennung("proto:lena"), "Lena Vogt (Instandhaltung)"), RollenMenge(Rolle.Instandhaltung)),
+        (new Benutzer(new BenutzerKennung("proto:paul"), "Paul Werner (Bediener)"), RollenMenge(Rolle.Bediener)),
+        (new Benutzer(new BenutzerKennung("proto:nina"), "Nina Fischer (Administration)"), RollenMenge(Rolle.Administration)),
     };
 
     private int _aktuellerIndex;
+
+    public PrototypBenutzerKontext()
+    {
+#if !DEBUG
+        throw new InvalidOperationException(
+            "PrototypBenutzerKontext ist nur in Debug-Builds zulässig (Spezifikation A8).");
+#endif
+    }
 
     public Benutzer AktuellerBenutzer => Testbenutzer[_aktuellerIndex].Benutzer;
 
