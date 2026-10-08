@@ -143,7 +143,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var anforderung = await _kontrolleingriffService.FreigebenAsync(anforderungVm.Id, AktuellerBenutzer);
+            var anforderung = await _kontrolleingriffService.FreigebenAsync(anforderungVm.Id);
 
             StatusMeldung = $"Kontrolleingriff #{anforderung.Id} freigegeben.";
 
@@ -169,7 +169,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var anforderung = await _kontrolleingriffService.AblehnenAsync(anforderungVm.Id, AktuellerBenutzer, begruendung: null);
+            var anforderung = await _kontrolleingriffService.AblehnenAsync(anforderungVm.Id, begruendung: null);
 
             StatusMeldung = $"Kontrolleingriff #{anforderung.Id} abgelehnt.";
 

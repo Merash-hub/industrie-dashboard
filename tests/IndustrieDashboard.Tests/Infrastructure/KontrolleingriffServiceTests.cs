@@ -1,5 +1,8 @@
+using IndustrieDashboard.Core.Autorisierung;
 using IndustrieDashboard.Core.Enums;
+using IndustrieDashboard.Core.Exceptions;
 using IndustrieDashboard.Core.Interfaces;
+using IndustrieDashboard.Core.Models;
 using IndustrieDashboard.Infrastructure.Data;
 using IndustrieDashboard.Infrastructure.Services;
 using Microsoft.Data.Sqlite;
@@ -9,17 +12,25 @@ using Xunit;
 namespace IndustrieDashboard.Tests.Infrastructure;
 
 /// <summary>
-/// Deckt das Vier-Augen-Prinzip aus der Spezifikation "Modul Kontrolleingriffe"
+/// Deckt das Vier-Augen-Prinzip und den Zeugenpfad aus der Spezifikation A6
 /// ab. Nutzt SQLite im Arbeitsspeicher mit offen gehaltener Verbindung, damit
-/// kein zusätzliches Test-NuGet-Paket nötig ist und das Verhalten dem echten
-/// Anbieter entspricht (inkl. der Unveränderlichkeits-Trigger auf dem
-/// Audit-Trail).
+/// das Verhalten dem echten Anbieter entspricht (inkl. Audit-Unveränderlichkeit).
+/// "Der aktuelle Benutzer" wird über eine austauschbare <see cref="TestBenutzerKontext"/>
+/// gesteuert und zwischen den Aufrufen umgeschaltet, genau wie im Prototyp
+/// (ein Arbeitsplatz, ein angemeldeter Benutzer zu einem Zeitpunkt).
 /// </summary>
 public sealed class KontrolleingriffServiceTests : IDisposable
 {
     private readonly SqliteConnection _verbindung;
-    private readonly IAuditLogService _auditLogService;
-    private readonly IKontrolleingriffService _kontrolleingriffService;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
+    private readonly TestBenutzerKontext _benutzerKontext;
+    private readonly KontrolleingriffService _service;
+
+    private static readonly Benutzer Bediener1 = new(new BenutzerKennung("proto:bediener1"), "Peter Bediener");
+    private static readonly Benutzer Instandhaltung1 = new(new BenutzerKennung("proto:instand1"), "Thomas Krause");
+    private static readonly Benutzer Instandhaltung2 = new(new BenutzerKennung("proto:instand2"), "Anna Weber");
+    private static readonly Benutzer Schichtleitung1 = new(new BenutzerKennung("proto:leitung1"), "Erika Leitung");
+    private static readonly Benutzer Administration1 = new(new BenutzerKennung("proto:admin1"), "Max Admin");
 
     public KontrolleingriffServiceTests()
     {
@@ -35,76 +46,259 @@ public sealed class KontrolleingriffServiceTests : IDisposable
             initDb.Database.Migrate();
         }
 
-        var dbContextFactory = new TestDbContextFactory(options);
-        _auditLogService = new AuditLogService(dbContextFactory);
-        _kontrolleingriffService = new KontrolleingriffService(dbContextFactory, _auditLogService);
+        _dbContextFactory = new TestDbContextFactory(options);
+        _benutzerKontext = new TestBenutzerKontext();
+        _service = new KontrolleingriffService(_dbContextFactory, _benutzerKontext);
     }
 
     public void Dispose() => _verbindung.Dispose();
 
-    [Fact]
-    public async Task FreigebenAsync_DurchDieselbePerson_WirftException()
-    {
-        var anforderung = await _kontrolleingriffService.AnfordernAsync(1, "Testbeschreibung", "Anna Weber");
+    private void AlsBenutzer(Benutzer benutzer, params Rolle[] rollen) =>
+        _benutzerKontext.Setzen(benutzer, rollen);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => _kontrolleingriffService.FreigebenAsync(anforderung.Id, "Anna Weber"));
+    private async Task<IReadOnlyList<AuditLogEintrag>> AuditEintraegeAsync()
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync();
+        return await db.AuditLogEintraege.OrderBy(a => a.Id).ToListAsync();
     }
 
     [Fact]
-    public async Task FreigebenAsync_DurchAndereePerson_SetztStatusUndSchreibtAudit()
+    public async Task FreigebenAsync_GleicheKennung_WirftVierAugenVerletzung()
     {
-        var anforderung = await _kontrolleingriffService.AnfordernAsync(1, "Testbeschreibung", "Anna Weber");
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
 
-        var ergebnis = await _kontrolleingriffService.FreigebenAsync(anforderung.Id, "Thomas Krause");
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigebenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_GleicherAnzeigenameAndereKennung_IstErlaubt()
+    {
+        var ersterBenutzer = new Benutzer(new BenutzerKennung("proto:instand-a"), "Gleicher Name");
+        var zweiterBenutzer = new Benutzer(new BenutzerKennung("proto:instand-b"), "Gleicher Name");
+
+        AlsBenutzer(ersterBenutzer, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(zweiterBenutzer, Rolle.Instandhaltung);
+        var ergebnis = await _service.FreigebenAsync(anforderung.Id);
 
         Assert.Equal(KontrolleingriffStatus.Freigegeben, ergebnis.Status);
-        Assert.Equal("Thomas Krause", ergebnis.FreigegebenVon);
-        Assert.NotNull(ergebnis.FreigegebenAm);
-
-        var audit = await _auditLogService.GetEintraegeAsync();
-        Assert.Contains(audit, e => e.Aktion == "Kontrolleingriff freigegeben" && e.Benutzer == "Thomas Krause");
     }
 
     [Fact]
-    public async Task AblehnenAsync_SetztStatusAbgelehnt_AuchDurchAnfordernden()
+    public async Task FreigebenAsync_GleicheKennungAndererAnzeigename_WirdAbgelehnt()
     {
-        var anforderung = await _kontrolleingriffService.AnfordernAsync(1, "Testbeschreibung", "Anna Weber");
+        var kennung = new BenutzerKennung("proto:instand-x");
+        var ersterAnzeigename = new Benutzer(kennung, "Erster Anzeigename");
+        var zweiterAnzeigename = new Benutzer(kennung, "Zweiter Anzeigename");
 
-        var ergebnis = await _kontrolleingriffService.AblehnenAsync(anforderung.Id, "Anna Weber", "Doch nicht nötig");
+        AlsBenutzer(ersterAnzeigename, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        // Regressionstest für den urspruenglichen Fehler: derselbe Mensch mit
+        // anderem Anzeigenamen (Tippfehler, Umbenennung) darf sich nicht
+        // selbst freigeben - die Kennung entscheidet, nicht der Name.
+        AlsBenutzer(zweiterAnzeigename, Rolle.Instandhaltung);
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigebenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_DurchAndereInstandhaltungsperson_SetztStatusUndSchreibtAudit()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        var ergebnis = await _service.FreigebenAsync(anforderung.Id);
+
+        Assert.Equal(KontrolleingriffStatus.Freigegeben, ergebnis.Status);
+        Assert.Equal(Instandhaltung2.Kennung.Wert, ergebnis.FreigegebenVonKennung);
+
+        var audit = await AuditEintraegeAsync();
+        Assert.Contains(audit, e => e.Aktion == "Kontrolleingriff freigegeben" && e.BenutzerKennung == Instandhaltung2.Kennung.Wert);
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_OhneBerechtigung_WirftNichtBerechtigtUndSchreibtZugriffVerweigert()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Bediener1, Rolle.Bediener);
+        await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.FreigebenAsync(anforderung.Id));
+
+        var audit = await AuditEintraegeAsync();
+        Assert.Contains(audit, e => e.Kategorie == AuditKategorie.ZugriffVerweigert && e.BenutzerKennung == Bediener1.Kennung.Wert);
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_Schichtleitung_DarfNieSelbstFreigeben()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Schichtleitung1, Rolle.Schichtleitung);
+        await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.FreigebenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_DoppelteFreigabe_WirdAbgelehnt()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        await _service.FreigebenAsync(anforderung.Id);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.FreigebenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task AblehnenAsync_DurchAndereInstandhaltungsperson_SetztStatusAbgelehnt()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        var ergebnis = await _service.AblehnenAsync(anforderung.Id, "Doch nicht nötig");
 
         Assert.Equal(KontrolleingriffStatus.Abgelehnt, ergebnis.Status);
-
-        var audit = await _auditLogService.GetEintraegeAsync();
-        Assert.Contains(audit, e => e.Aktion == "Kontrolleingriff abgelehnt" && e.Benutzer == "Anna Weber");
     }
 
     [Fact]
-    public async Task GetOffeneAnforderungenAsync_LiefertNurAngeforderte()
+    public async Task AblehnenAsync_DurchAnfordernde_WirftVierAugenVerletzung()
     {
-        var offen = await _kontrolleingriffService.AnfordernAsync(1, "Bleibt offen", "Anna Weber");
-        var wirdFreigegeben = await _kontrolleingriffService.AnfordernAsync(2, "Wird freigegeben", "Anna Weber");
-        await _kontrolleingriffService.FreigebenAsync(wirdFreigegeben.Id, "Thomas Krause");
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
 
-        var offene = await _kontrolleingriffService.GetOffeneAnforderungenAsync();
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.AblehnenAsync(anforderung.Id, "Rücknahme"));
+    }
+
+    [Fact]
+    public async Task GetOffeneAnforderungenAsync_LiefertNurUnentschiedene()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var offen = await _service.AnfordernAsync(1, "Bleibt offen");
+        var wirdFreigegeben = await _service.AnfordernAsync(2, "Wird freigegeben");
+
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        await _service.FreigebenAsync(wirdFreigegeben.Id);
+
+        var offene = await _service.GetOffeneAnforderungenAsync();
 
         Assert.Single(offene);
         Assert.Equal(offen.Id, offene[0].Id);
-        Assert.All(offene, a => Assert.Equal(KontrolleingriffStatus.Angefordert, a.Status));
+    }
+
+    // --- Zeugenpfad (Spezifikation A6) ---
+
+    [Fact]
+    public async Task FreigebenAsync_SelbstOhneZeuge_WirftVierAugenVerletzung()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigebenAsync(anforderung.Id));
     }
 
     [Fact]
-    public void PrototypBenutzerKontext_Wechsle_AendertBenutzerUndLoestEventAus()
+    public async Task FreigabeMitZeugeAnfordernAsync_OhnePflichtgrund_WirftVierAugenVerletzung()
     {
-        var kontext = new PrototypBenutzerKontext();
-        var neuerBenutzer = kontext.VerfuegbareBenutzer[1];
-        var ausgeloest = false;
-        kontext.BenutzerGewechselt += (_, _) => ausgeloest = true;
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
 
-        kontext.Wechsle(neuerBenutzer);
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, ""));
+    }
 
-        Assert.Equal(neuerBenutzer, kontext.AktuellerBenutzer.Anzeigename);
-        Assert.True(ausgeloest);
+    [Fact]
+    public async Task AlsZeugeBestaetigenAsync_DurchAnfordernde_WirftVierAugenVerletzung()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+        await _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "Alleinbesetzung");
+
+        // Gleiche Kennung wie die anfordernde Person, diesmal mit der
+        // Berechtigung zum Zeugen - damit diese Prüfung wirklich die Kennung
+        // testet und nicht nur zufällig an der fehlenden Berechtigung scheitert.
+        var dieselbePersonMitZeugenrecht = new Benutzer(Instandhaltung1.Kennung, Instandhaltung1.Anzeigename);
+        AlsBenutzer(dieselbePersonMitZeugenrecht, Rolle.Schichtleitung);
+
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => _service.AlsZeugeBestaetigenAsync(anforderung.Id));
+    }
+
+    [Theory]
+    [InlineData(Rolle.Bediener)]
+    [InlineData(Rolle.Administration)]
+    public async Task AlsZeugeBestaetigenAsync_OhneBerechtigung_WirftNichtBerechtigt(Rolle rolleOhneZeugenrecht)
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+        await _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "Alleinbesetzung");
+
+        var unberechtigt = rolleOhneZeugenrecht == Rolle.Bediener ? Bediener1 : Administration1;
+        AlsBenutzer(unberechtigt, rolleOhneZeugenrecht);
+
+        await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.AlsZeugeBestaetigenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task FreigebenAsync_AbgelaufeneZeugenbestaetigung_WirftVierAugenVerletzung()
+    {
+        var kurzeGueltigkeit = new KontrolleingriffService(_dbContextFactory, _benutzerKontext, TimeSpan.FromMinutes(15));
+
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await kurzeGueltigkeit.AnfordernAsync(1, "Alleinbesetzung");
+        await kurzeGueltigkeit.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "Alleinbesetzung");
+
+        AlsBenutzer(Schichtleitung1, Rolle.Schichtleitung);
+        await kurzeGueltigkeit.AlsZeugeBestaetigenAsync(anforderung.Id);
+
+        // Bestaetigungszeitpunkt manipuliert in die Vergangenheit, damit die
+        // Gueltigkeit (15 Minuten) nachweislich abgelaufen ist.
+        await using (var db = await _dbContextFactory.CreateDbContextAsync())
+        {
+            var geladen = await db.KontrolleingriffAnforderungen.SingleAsync(a => a.Id == anforderung.Id);
+            geladen.ZeugeBestaetigtAm = DateTime.UtcNow.AddMinutes(-20);
+            await db.SaveChangesAsync();
+        }
+
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        await Assert.ThrowsAsync<VierAugenVerletzungException>(
+            () => kurzeGueltigkeit.FreigebenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task Zeugenpfad_VollstaendigerAblauf_GibtFreiUndAuditEnthaeltAlleDreiKennungen()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+        await _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "Alleinbesetzung");
+
+        AlsBenutzer(Schichtleitung1, Rolle.Schichtleitung);
+        var nachBestaetigung = await _service.AlsZeugeBestaetigenAsync(anforderung.Id);
+        Assert.Equal(KontrolleingriffStatus.ZeugeBestaetigt, nachBestaetigung.Status);
+
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var ergebnis = await _service.FreigebenAsync(anforderung.Id);
+
+        Assert.Equal(KontrolleingriffStatus.Freigegeben, ergebnis.Status);
+
+        var audit = await AuditEintraegeAsync();
+        var freigabeEintrag = Assert.Single(audit, e => e.Kategorie == AuditKategorie.FreigabeMitZeuge);
+
+        Assert.Contains(Instandhaltung1.Kennung.Wert, freigabeEintrag.NeuerWert);
+        Assert.Contains(Schichtleitung1.Kennung.Wert, freigabeEintrag.NeuerWert);
     }
 
     private sealed class TestDbContextFactory : IDbContextFactory<AppDbContext>
@@ -114,5 +308,29 @@ public sealed class KontrolleingriffServiceTests : IDisposable
         public TestDbContextFactory(DbContextOptions<AppDbContext> options) => _options = options;
 
         public AppDbContext CreateDbContext() => new(_options);
+    }
+
+    /// <summary>
+    /// Frei steuerbarer <see cref="IBenutzerKontext"/> für Tests: erlaubt, im
+    /// Unterschied zu <see cref="PrototypBenutzerKontext"/>, beliebige
+    /// Kombinationen aus Kennung, Anzeigename und Rollen, auch zwei
+    /// verschiedene Kennungen mit demselben Anzeigenamen (Regressionstest).
+    /// </summary>
+    private sealed class TestBenutzerKontext : IBenutzerKontext
+    {
+        public Benutzer AktuellerBenutzer { get; private set; } = new(new BenutzerKennung("proto:unset"), "Unset");
+
+        public IReadOnlySet<Rolle> Rollen { get; private set; } = new HashSet<Rolle>();
+
+        public event EventHandler? BenutzerGewechselt;
+
+        public bool HatBerechtigung(Berechtigung berechtigung) => RollenBerechtigungen.Hat(Rollen, berechtigung);
+
+        public void Setzen(Benutzer benutzer, params Rolle[] rollen)
+        {
+            AktuellerBenutzer = benutzer;
+            Rollen = rollen.ToHashSet();
+            BenutzerGewechselt?.Invoke(this, EventArgs.Empty);
+        }
     }
 }
