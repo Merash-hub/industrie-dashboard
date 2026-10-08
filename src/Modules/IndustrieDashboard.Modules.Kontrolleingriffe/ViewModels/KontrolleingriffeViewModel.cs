@@ -18,7 +18,7 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
     private readonly IKontrolleingriffService _kontrolleingriffService;
     private readonly IAuditLogService _auditLogService;
     private readonly IBenutzerKontext _benutzerKontext;
-    private readonly IBenutzerWechsel _benutzerWechsel;
+    private readonly IBenutzerWechsel? _benutzerWechsel;
     private readonly IEventAggregator _eventAggregator;
 
     private string _aktuellerBenutzer;
@@ -30,8 +30,8 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
         IKontrolleingriffService kontrolleingriffService,
         IAuditLogService auditLogService,
         IBenutzerKontext benutzerKontext,
-        IBenutzerWechsel benutzerWechsel,
-        IEventAggregator eventAggregator)
+        IEventAggregator eventAggregator,
+        IBenutzerWechsel? benutzerWechsel = null)
     {
         _kontrolleingriffService = kontrolleingriffService;
         _auditLogService = auditLogService;
@@ -74,11 +74,17 @@ public class KontrolleingriffeViewModel : ViewModelBase, IDisposable
                 return;
             }
 
-            _benutzerWechsel.Wechsle(value);
+            _benutzerWechsel?.Wechsle(value);
         }
     }
 
-    public IReadOnlyList<string> VerfuegbareBenutzer => _benutzerWechsel.VerfuegbareBenutzer;
+    /// <summary>
+    /// Leer, wenn kein Prototyp-Anbieter aktiv ist - die Benutzerwechsel-
+    /// Oberfläche erscheint dann gar nicht erst (Spezifikation A8).
+    /// </summary>
+    public IReadOnlyList<string> VerfuegbareBenutzer => _benutzerWechsel?.VerfuegbareBenutzer ?? Array.Empty<string>();
+
+    public bool BenutzerwechselVerfuegbar => _benutzerWechsel is not null;
 
     public string StatusMeldung
     {

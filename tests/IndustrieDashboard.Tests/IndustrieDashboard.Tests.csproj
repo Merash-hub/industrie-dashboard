@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\src\IndustrieDashboard.Core\IndustrieDashboard.Core.csproj" />
     <ProjectReference Include="..\..\src\IndustrieDashboard.Shared\IndustrieDashboard.Shared.csproj" />
     <ProjectReference Include="..\..\src\IndustrieDashboard.Infrastructure\IndustrieDashboard.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\IndustrieDashboard.Identity.Windows\IndustrieDashboard.Identity.Windows.csproj" />
     <!-- Für den Navigations-/DI-Scope-Test: MainWindowViewModel und die Module. -->
     <ProjectReference Include="..\..\src\IndustrieDashboard.App\IndustrieDashboard.App.csproj" />
   </ItemGroup>

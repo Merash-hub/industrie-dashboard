@@ -1,10 +1,13 @@
 using System.IO;
 using System.Windows;
+using IndustrieDashboard.App.Identitaet;
 using IndustrieDashboard.App.ViewModels;
 using IndustrieDashboard.App.Views;
 using IndustrieDashboard.Core.Interfaces;
+using IndustrieDashboard.Identity.Windows;
 using IndustrieDashboard.Infrastructure.Data;
 using IndustrieDashboard.Infrastructure.DependencyInjection;
+using IndustrieDashboard.Infrastructure.Services;
 using IndustrieDashboard.Modules.Dashboard;
 using IndustrieDashboard.Modules.Kontrolleingriffe;
 using IndustrieDashboard.Modules.Maschinenueberwachung;
@@ -12,6 +15,7 @@ using IndustrieDashboard.Modules.Schichtplanung;
 using IndustrieDashboard.Shared.Events;
 using IndustrieDashboard.Shared.Modules;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -58,6 +62,33 @@ public partial class App : Application
 
         try
         {
+            IConfiguration? konfiguration;
+            try
+            {
+                konfiguration = new ConfigurationBuilder()
+                    .SetBasePath(AppContext.BaseDirectory)
+                    .AddJsonFile("appsettings.json", optional: true)
+                    .AddJsonFile("appsettings.Development.json", optional: true)
+                    .Build();
+            }
+            catch (Exception ex)
+            {
+                // Fail closed, aber nicht Fail-Startup: eine unlesbare
+                // Konfigurationsdatei fuehrt zum sicheren Standard "Windows"
+                // (Spezifikation A8), nicht zum Startabbruch.
+                Log.Warning(ex, "Konfigurationsdatei konnte nicht gelesen werden; Standard 'Windows' wird verwendet.");
+                konfiguration = null;
+            }
+
+#if DEBUG
+            const bool istDebugBuild = true;
+#else
+            const bool istDebugBuild = false;
+#endif
+
+            var identitaetsanbieter = IdentitaetsanbieterErmittler.Ermitteln(konfiguration, istDebugBuild);
+            Log.Information("Identitätsanbieter: {Identitaetsanbieter}", identitaetsanbieter);
+
             var services = new ServiceCollection();
 
             services.AddLogging(builder =>
@@ -68,6 +99,27 @@ public partial class App : Application
 
             services.AddInfrastruktur(sqliteDbPfad);
             services.AddSingleton<IEventAggregator, EventAggregator>();
+
+            switch (identitaetsanbieter)
+            {
+                case Identitaetsanbieter.Prototyp:
+                    // Erst die konkrete Instanz registrieren, dann beide Schnittstellen
+                    // darauf abbilden, damit IBenutzerKontext und IBenutzerWechsel
+                    // garantiert dieselbe Instanz liefern.
+                    services.AddSingleton<PrototypBenutzerKontext>();
+                    services.AddSingleton<IBenutzerKontext>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
+                    services.AddSingleton<IBenutzerWechsel>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
+                    break;
+
+                case Identitaetsanbieter.Windows:
+                    var rollenGruppen = konfiguration?.GetSection("Sicherheit:RollenGruppen").Get<RollenGruppenOptions>()
+                        ?? new RollenGruppenOptions();
+                    // Keine IBenutzerWechsel-Registrierung: Der Benutzerwechsel ist
+                    // reine Prototyp-Funktionalität (Spezifikation A8).
+                    services.AddSingleton<IBenutzerKontext>(sp =>
+                        WindowsBenutzerKontext.AusAktuellerAnmeldung(rollenGruppen, sp.GetRequiredService<ILogger<WindowsBenutzerKontext>>()));
+                    break;
+            }
 
             foreach (var modul in _alleModule)
             {

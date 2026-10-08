@@ -21,12 +21,11 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<IAuditLogService, AuditLogService>();
         services.AddSingleton<IKontrolleingriffService, KontrolleingriffService>();
 
-        // Erst die konkrete Instanz registrieren, dann beide Schnittstellen darauf
-        // abbilden, damit IBenutzerKontext und IBenutzerWechsel garantiert dieselbe
-        // Instanz liefern (siehe PrototypBenutzerKontext).
-        services.AddSingleton<PrototypBenutzerKontext>();
-        services.AddSingleton<IBenutzerKontext>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
-        services.AddSingleton<IBenutzerWechsel>(sp => sp.GetRequiredService<PrototypBenutzerKontext>());
+        // IBenutzerKontext (und ggf. IBenutzerWechsel) werden bewusst NICHT hier
+        // registriert: Welcher Anbieter (Windows/Prototyp) verwendet wird, ist
+        // eine Entscheidung der Composition Root anhand der Konfiguration
+        // (siehe App.xaml.cs, Spezifikation A7/A8) - die Infrastruktur-Schicht
+        // kennt diese Entscheidung nicht.
 
         // Für den Prototyp: simulierte Datenquelle als Singleton, damit der
         // Timer über die Lebensdauer der App läuft. Später hier einfach durch
