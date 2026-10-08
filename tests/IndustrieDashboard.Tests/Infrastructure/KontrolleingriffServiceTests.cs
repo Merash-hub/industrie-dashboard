@@ -197,6 +197,59 @@ public sealed class KontrolleingriffServiceTests : IDisposable
         Assert.Equal(offen.Id, offene[0].Id);
     }
 
+    // --- Zurückziehen (eigene Rücknahme, ohne Vier-Augen-Prüfung) ---
+
+    [Fact]
+    public async Task ZurueckziehenAsync_DurchAnfordernde_SetztStatusZurueckgezogenUndSchreibtAudit()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        var ergebnis = await _service.ZurueckziehenAsync(anforderung.Id);
+
+        Assert.Equal(KontrolleingriffStatus.Zurueckgezogen, ergebnis.Status);
+
+        var audit = await AuditEintraegeAsync();
+        Assert.Contains(audit, e => e.Aktion == "Kontrolleingriff zurückgezogen" && e.BenutzerKennung == Instandhaltung1.Kennung.Wert);
+    }
+
+    [Fact]
+    public async Task ZurueckziehenAsync_WaehrendZeugeAngefragt_IstErlaubt()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Alleinbesetzung");
+        await _service.FreigabeMitZeugeAnfordernAsync(anforderung.Id, "Alleinbesetzung");
+
+        var ergebnis = await _service.ZurueckziehenAsync(anforderung.Id);
+
+        Assert.Equal(KontrolleingriffStatus.Zurueckgezogen, ergebnis.Status);
+    }
+
+    [Fact]
+    public async Task ZurueckziehenAsync_DurchFremdePerson_WirftNichtBerechtigt()
+    {
+        AlsBenutzer(Bediener1, Rolle.Bediener);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        await Assert.ThrowsAsync<NichtBerechtigtException>(
+            () => _service.ZurueckziehenAsync(anforderung.Id));
+    }
+
+    [Fact]
+    public async Task ZurueckziehenAsync_BereitsFreigegeben_WirftInvalidOperation()
+    {
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        var anforderung = await _service.AnfordernAsync(1, "Testbeschreibung");
+
+        AlsBenutzer(Instandhaltung2, Rolle.Instandhaltung);
+        await _service.FreigebenAsync(anforderung.Id);
+
+        AlsBenutzer(Instandhaltung1, Rolle.Instandhaltung);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service.ZurueckziehenAsync(anforderung.Id));
+    }
+
     // --- Zeugenpfad (Spezifikation A6) ---
 
     [Fact]

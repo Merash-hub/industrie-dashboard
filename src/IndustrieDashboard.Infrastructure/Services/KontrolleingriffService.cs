@@ -211,6 +211,57 @@ public class KontrolleingriffService : IKontrolleingriffService
         return anforderung;
     }
 
+    public async Task<KontrolleingriffAnforderung> ZurueckziehenAsync(int anforderungId, CancellationToken ct = default)
+    {
+        await using var db = await _dbContextFactory.CreateDbContextAsync(ct);
+        var aktueller = _benutzerKontext.AktuellerBenutzer;
+
+        var anforderung = await db.KontrolleingriffAnforderungen.FirstOrDefaultAsync(a => a.Id == anforderungId, ct)
+            ?? throw new InvalidOperationException($"Kontrolleingriff-Anforderung #{anforderungId} wurde nicht gefunden.");
+
+        var zielobjekt = $"Maschine #{anforderung.MaschineId}";
+
+        if (!_benutzerKontext.HatBerechtigung(Berechtigung.KontrolleingriffAnfordern))
+        {
+            throw await VerweigereAsync(db, "Kontrolleingriff zurückgezogen", zielobjekt,
+                "Keine Berechtigung, einen Kontrolleingriff anzufordern bzw. zurückzuziehen.",
+                grund => new NichtBerechtigtException(grund), ct);
+        }
+
+        // Bewusst keine Vier-Augen-Prüfung: Zurückziehen ist die Rücknahme der
+        // eigenen, noch nicht entschiedenen Anforderung, kein Freigeben/Ablehnen.
+        if (!string.Equals(anforderung.AngefordertVonKennung, aktueller.Kennung.Wert, StringComparison.Ordinal))
+        {
+            throw await VerweigereAsync(db, "Kontrolleingriff zurückgezogen", zielobjekt,
+                "Nur die anfordernde Person selbst darf ihre eigene Anforderung zurückziehen.",
+                grund => new NichtBerechtigtException(grund), ct);
+        }
+
+        if (anforderung.Status is not (KontrolleingriffStatus.Angefordert or KontrolleingriffStatus.ZeugeAngefragt))
+        {
+            throw await VerweigereAsync(db, "Kontrolleingriff zurückgezogen", zielobjekt,
+                $"Anforderung #{anforderungId} ist nicht mehr offen (Status {anforderung.Status}) und kann nicht mehr zurückgezogen werden.",
+                grund => new InvalidOperationException(grund), ct);
+        }
+
+        var vorherigerStatus = anforderung.Status;
+        anforderung.Status = KontrolleingriffStatus.Zurueckgezogen;
+
+        db.AuditLogEintraege.Add(new AuditLogEintrag
+        {
+            Benutzer = aktueller.Anzeigename,
+            BenutzerKennung = aktueller.Kennung.Wert,
+            Kategorie = AuditKategorie.Kontrolleingriff,
+            Aktion = "Kontrolleingriff zurückgezogen",
+            Zielobjekt = zielobjekt,
+            AlterWert = vorherigerStatus.ToString(),
+            NeuerWert = "Zurückgezogen"
+        });
+
+        await db.SaveChangesAsync(ct);
+        return anforderung;
+    }
+
     public async Task<KontrolleingriffAnforderung> FreigabeMitZeugeAnfordernAsync(int anforderungId, string ausnahmeGrund, CancellationToken ct = default)
     {
         await using var db = await _dbContextFactory.CreateDbContextAsync(ct);

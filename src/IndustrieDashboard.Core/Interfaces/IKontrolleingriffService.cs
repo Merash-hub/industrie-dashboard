@@ -31,6 +31,15 @@ public interface IKontrolleingriffService
     Task<KontrolleingriffAnforderung> AblehnenAsync(int anforderungId, string? begruendung, CancellationToken ct = default);
 
     /// <summary>
+    /// Nur die anfordernde Person selbst darf ihre eigene, noch offene
+    /// Anforderung (Status <see cref="Enums.KontrolleingriffStatus.Angefordert"/>
+    /// oder <see cref="Enums.KontrolleingriffStatus.ZeugeAngefragt"/>) zurückziehen.
+    /// Bewusst ohne Vier-Augen-Prüfung, da es sich um eine reine Rücknahme der
+    /// eigenen, noch nicht entschiedenen Anforderung handelt.
+    /// </summary>
+    Task<KontrolleingriffAnforderung> ZurueckziehenAsync(int anforderungId, CancellationToken ct = default);
+
+    /// <summary>
     /// Zeugenpfad, erster Schritt: Nur für die Instandhaltung, nur für die
     /// eigene, noch offene Anforderung, nur mit Pflichtgrund (z. B.
     /// "Alleinbesetzung"). Setzt den Status auf <see cref="Enums.KontrolleingriffStatus.ZeugeAngefragt"/>.

@@ -16,5 +16,8 @@ public enum KontrolleingriffStatus
     ZeugeAngefragt = 4,
 
     /// <summary>Zeuge hat bestätigt; die anfordernde Person kann die Freigabe jetzt abschließen.</summary>
-    ZeugeBestaetigt = 5
+    ZeugeBestaetigt = 5,
+
+    /// <summary>Die anfordernde Person hat ihre eigene, noch offene Anforderung zurückgezogen.</summary>
+    Zurueckgezogen = 6
 }
