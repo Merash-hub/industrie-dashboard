@@ -138,6 +138,35 @@ für Administratoren beschreibbar** sein. Wer die Datei ändern kann, kann sonst
 z. B. `Instandhaltung` versehentlich oder absichtlich auf eine falsche Gruppe
 umbiegen. Normale Benutzer dürfen die Datei lesen, aber nicht schreiben.
 
+## CI und Lieferkette
+
+`.github/workflows/ci.yml` baut bei jedem Push auf `main` und jedem Pull
+Request gegen `main` auf `windows-latest`: Build Debug und Release, Tests in
+Debug (der Prototyp-Anbieter startet in Release absichtlich nicht), Prüfung
+auf bekannte Schwachstellen. `.github/dependabot.yml` schlägt wöchentlich
+Updates für NuGet und GitHub-Aktionen vor; übernommen wird erst nach grünem
+CI-Lauf. Dasselbe lokal prüfen:
+
+```powershell
+dotnet build -c Debug
+dotnet build -c Release
+dotnet test -c Debug
+dotnet list package --vulnerable --include-transitive
+```
+
+Regeln für Workflows (verbindlich):
+
+- **Nur GitHub-eigene Aktionen** (`actions/...`), keine Aktionen Dritter.
+- Jede Aktion auf einen **vollständigen Commit-Hash** festnageln, mit
+  Versionskommentar (`uses: actions/checkout@<40 Zeichen> # v7.0.1`). Hash
+  per `git ls-remote https://github.com/actions/<name>` selbst abfragen (bei
+  annotierten Tags den `^{}`-Eintrag), nie erfinden; nur Versionen, die älter
+  als zwei Wochen sind.
+- `permissions: contents: read`, keine Secrets, niemals `pull_request_target`,
+  `actions/checkout` mit `persist-credentials: false`.
+- Kein CodeQL-Workflow im Repo: CodeQL wird über die GitHub-Einstellungen
+  eingerichtet.
+
 ## Konventionen
 
 - Bezeichner und Kommentare auf Deutsch (so ist der bestehende Code geschrieben)
@@ -151,5 +180,6 @@ fachlich ausbauen, Vertretungen im Schichtplanung-Modul (Spezifikation Teil
 C), dauerhafte Messdatenspeicherung in PostgreSQL mit Totband/Aggregaten/TLS
 (Teil D), Auswertungsansicht mit seltener Aktualisierung (Teil D5), Entra-ID-
 Anbindung (Abstraktion ist vorbereitet, siehe `BenutzerKennung`), CI-Pipeline
-in Azure DevOps. Kein IdentityServer vorgesehen (die Anwendung erbt bewusst
+in Azure DevOps (nur falls im Zielbetrieb gewünscht; GitHub Actions läuft
+bereits). Kein IdentityServer vorgesehen (die Anwendung erbt bewusst
 nur die Windows-Anmeldung, siehe `docs/spec-identitaet-rollen.md` Abschnitt A3).

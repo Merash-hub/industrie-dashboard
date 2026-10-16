@@ -12,8 +12,29 @@ ergänzen. Beim Abschluss eines Meilensteins den Block mit Version und Datum ver
 
 ## Unveröffentlicht
 
+Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
+
 ### Hinzugefügt
-- Auftrag Stufe 1b (CI, Lieferkette, README) in `docs/` und dieser Patchverlauf.
+- Auftrag Stufe 1b in `docs/` und dieser Patchverlauf (9dd1763).
+- Automatischer Build und Test auf Windows bei jedem Push auf `main` und jedem Pull Request
+  (`.github/workflows/ci.yml`): Debug und Release bauen, Tests in Debug, Testbericht als
+  Download (b1b640e).
+- Dependabot für NuGet-Pakete und GitHub-Aktionen, wöchentlich, Microsoft-Pakete gruppiert
+  (8844c85).
+- `SECURITY.md`: Sicherheitslücken privat über GitHub melden, unterstützter Stand, Umfang,
+  bestehende Schutzmaßnahmen (e753c02).
+
+### Geändert
+- `README.md` auf den tatsächlichen Stand gebracht: Statusabzeichen, Tabelle und Strukturbaum
+  korrigiert, „Qualitätsnachweis" statt des veralteten Entstehungshinweises, neuer Abschnitt
+  „Sicherheit" (8377e7c).
+- `CLAUDE.md`: Abschnitt „CI und Lieferkette" mit den Regeln für Workflows.
+
+### Sicherheit
+- Der CI-Lauf schlägt fehl, wenn ein Paket (auch indirekt eingebunden) eine bekannte Schwachstelle
+  hat. Lässt sich das Prüfergebnis nicht lesen, schlägt er ebenfalls fehl (b1b640e).
+- Workflow mit Mindestrechten: nur Lesen, keine Secrets, kein `pull_request_target`, nur
+  GitHub-eigene Aktionen, jede auf einen Commit-Hash festgenagelt (b1b640e).
 
 ---
 
