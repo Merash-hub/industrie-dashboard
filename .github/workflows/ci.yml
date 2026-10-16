@@ -1,0 +1,101 @@
+# Baut und testet das Projekt bei jedem Push auf main und jedem Pull Request
+# gegen main auf einem frischen Windows-Rechner von GitHub.
+#
+# Sicherheitsregeln fuer diese Datei (siehe CLAUDE.md):
+# - Nur GitHub-eigene Aktionen (actions/...), jede auf einen vollstaendigen
+#   Commit-Hash festgenagelt (Kommentar nennt die Version).
+# - Nur Leserechte, keine Secrets. Niemals "pull_request_target" verwenden.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-und-test:
+    name: Build und Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    env:
+      DOTNET_NOLOGO: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+    steps:
+      - name: Quellcode holen
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: .NET 10 einrichten
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Pakete wiederherstellen
+        run: dotnet restore IndustrieDashboard.sln
+
+      - name: Build (Debug)
+        run: dotnet build IndustrieDashboard.sln --configuration Debug --no-restore
+
+      # Release wird nur gebaut, nicht getestet: der Prototyp-Anbieter startet
+      # in Release absichtlich nicht, die Tests brauchen ihn.
+      - name: Build (Release)
+        run: dotnet build IndustrieDashboard.sln --configuration Release --no-restore
+
+      - name: Tests (Debug)
+        run: >-
+          dotnet test IndustrieDashboard.sln --configuration Debug --no-build
+          --logger "trx;LogFileName=testergebnisse.trx" --results-directory TestResults
+
+      - name: Testbericht hochladen
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: testergebnisse
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+      # "dotnet list package --vulnerable" endet immer mit Exitcode 0, auch wenn
+      # es Schwachstellen findet. Deshalb wird die Ausgabe (JSON) ausgewertet.
+      # Fail closed: Laesst sich die Ausgabe nicht lesen, schlaegt der Lauf fehl.
+      - name: Bekannte Schwachstellen in Paketen pruefen
+        shell: pwsh
+        run: |
+          $ausgabe = dotnet list IndustrieDashboard.sln package --vulnerable --include-transitive --format json | Out-String
+          Write-Output $ausgabe
+          $bericht = $ausgabe | ConvertFrom-Json
+          if (-not $bericht.projects -or $bericht.projects.Count -eq 0) {
+            Write-Error "Keine Projekte in der Ausgabe - Pruefung nicht aussagekraeftig."
+            exit 1
+          }
+          if ($bericht.problems) {
+            Write-Error "Die Pruefung meldet Probleme (siehe Ausgabe oben)."
+            exit 1
+          }
+          $funde = @()
+          foreach ($projekt in $bericht.projects) {
+            foreach ($rahmen in @($projekt.frameworks)) {
+              foreach ($paket in @($rahmen.topLevelPackages) + @($rahmen.transitivePackages)) {
+                if ($paket -and $paket.vulnerabilities) {
+                  $funde += "$($projekt.path): $($paket.id) $($paket.resolvedVersion)"
+                }
+              }
+            }
+          }
+          if ($funde.Count -gt 0) {
+            Write-Error ("Bekannte Schwachstellen gefunden:`n" + ($funde -join "`n"))
+            exit 1
+          }
+          Write-Output "Keine bekannten Schwachstellen gefunden."
