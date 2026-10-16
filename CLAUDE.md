@@ -18,7 +18,7 @@ fertiges Produkt.
   beide kostenlos. DevExpress/Telerik sind im Zielbild vorgesehen, aber bewusst
   noch nicht eingebunden (Lizenzkosten). Ein späterer Wechsel betrifft nur die
   Views, nicht die ViewModels.
-- **Daten**: EF Core 10.0.11 mit SQLite lokal; PostgreSQL für die zentrale
+- **Daten**: EF Core 10.0.13 mit SQLite lokal; PostgreSQL für die zentrale
   Instanz ist vorgesehen (zweiter DbContext mit `UseNpgsql`), für Messdaten
   als zweite, externe Datenbank geplant (Spezifikation Teil D, noch nicht
   umgesetzt). Schema über echte EF-Core-Migrationen (`Data/Migrations/` in
@@ -26,10 +26,16 @@ fertiges Produkt.
   `Database.Migrate()` auf. Neue Migration: `dotnet tool run dotnet-ef
   migrations add <Name> --project src/IndustrieDashboard.Infrastructure
   --startup-project src/IndustrieDashboard.Infrastructure --output-dir
-  Data/Migrations` (lokales Tool, siehe `dotnet-tools.json`).
+  Data/Migrations` (lokales Tool, siehe `.config/dotnet-tools.json`; die
+  Version von `dotnet-ef` muss immer gleich der von
+  `Microsoft.EntityFrameworkCore` sein).
 - **Logging**: Serilog (Konsole + Datei)
-- **Tests**: xUnit. Die Testpakete sind noch alt (`xunit` 2.4.2,
-  `Microsoft.NET.Test.Sdk` 17.6.0) und sollten bei Gelegenheit gehoben werden.
+- **Tests**: xUnit 2.9.3 (`xunit.runner.visualstudio` 4.0.1,
+  `Microsoft.NET.Test.Sdk` 18.11.0, `coverlet.collector` 10.1.0). Tests, die
+  `PrototypBenutzerKontext` brauchen, tragen `[NurImDebugBuildFact]` bzw.
+  `[NurImDebugBuildTheory]` und werden in Release mit Begründung
+  übersprungen; `[NurImReleaseBuildFact]` prüft, dass sich der
+  Prototyp-Anbieter dort verweigert.
 - Paketversionen müssen vor dem Eintragen gegen die NuGet-API auf Existenz als
   stabile Version geprüft werden (nicht nur gegen Release Notes/Wissen aus dem
   Training, da Pakete zurückgezogen oder umbenannt werden können).

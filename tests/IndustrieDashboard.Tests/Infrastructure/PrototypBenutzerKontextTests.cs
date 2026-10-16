@@ -14,7 +14,7 @@ public class PrototypBenutzerKontextTests
         return (new PrototypBenutzerKontext(audit), audit);
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void Wechsle_AendertBenutzerUndLoestEventAus()
     {
         var (kontext, _) = NeuerKontext();
@@ -28,7 +28,7 @@ public class PrototypBenutzerKontextTests
         Assert.True(ausgeloest);
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void HatBerechtigung_RichtetSichNachRolleDesAktuellenBenutzers()
     {
         var (kontext, _) = NeuerKontext();
@@ -38,7 +38,7 @@ public class PrototypBenutzerKontextTests
         Assert.False(kontext.HatBerechtigung(Berechtigung.KontrolleingriffFreigeben));
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void VerfuegbareBenutzer_EnthaeltSechsTestbenutzerLautSpezifikationA8()
     {
         var (kontext, _) = NeuerKontext();
@@ -50,7 +50,7 @@ public class PrototypBenutzerKontextTests
         Assert.Equal(kontext.VerfuegbareBenutzer.Count, kontext.VerfuegbareBenutzer.Distinct().Count());
     }
 
-    [Theory]
+    [NurImDebugBuildTheory]
     [InlineData(0, Rolle.Maschineneinrichter)]
     [InlineData(1, Rolle.Schichtleitung)]
     [InlineData(2, Rolle.Instandhaltung)]
@@ -66,7 +66,7 @@ public class PrototypBenutzerKontextTests
         Assert.Equal(new HashSet<Rolle> { erwarteteRolle }, kontext.Rollen);
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void Wechsle_BeideInstandhaltungsTestbenutzer_HabenUnterschiedlicheKennung()
     {
         var (kontext, _) = NeuerKontext();
@@ -82,7 +82,7 @@ public class PrototypBenutzerKontextTests
         Assert.NotEqual(ersteKennung, zweiteKennung);
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void Konstruktor_SchreibtAnmeldungFuerErstenTestbenutzer()
     {
         var (kontext, audit) = NeuerKontext();
@@ -93,7 +93,7 @@ public class PrototypBenutzerKontextTests
         Assert.Contains("Maschineneinrichter", eintrag.NeuerWert);
     }
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void Wechsle_SchreibtWeiterenAnmeldungEintragFuerNeuenBenutzer()
     {
         var (kontext, audit) = NeuerKontext();
@@ -104,6 +104,15 @@ public class PrototypBenutzerKontextTests
         var letzter = audit.Eintraege[^1];
         Assert.Equal(AuditKategorie.Anmeldung, letzter.Kategorie);
         Assert.Equal("proto:thomas", letzter.BenutzerKennung);
+    }
+
+    [NurImReleaseBuildFact]
+    public void Konstruktor_ImReleaseBuild_VerweigertSichOhneAuditEintrag()
+    {
+        var audit = new FakeAuditLogService();
+
+        Assert.Throws<InvalidOperationException>(() => new PrototypBenutzerKontext(audit));
+        Assert.Empty(audit.Eintraege);
     }
 
     private sealed class FakeAuditLogService : IAuditLogService

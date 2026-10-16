@@ -37,12 +37,21 @@ public class PrototypBenutzerKontext : IBenutzerKontext, IBenutzerWechsel
 
     public PrototypBenutzerKontext(IAuditLogService auditLogService)
     {
+        StelleDebugBuildSicher();
+        _auditLogService = auditLogService;
+        ProtokolliereAnmeldungAsync().GetAwaiter().GetResult();
+    }
+
+    // Eigene Methode statt "#if !DEBUG throw" direkt im Konstruktor: sonst
+    // meldet der Compiler im Release-Build den restlichen Konstruktor als
+    // unerreichbaren Code (CS0162). Die Wirkung ist dieselbe: in Release wirft
+    // jeder Konstruktoraufruf, bevor irgendetwas anderes passiert.
+    private static void StelleDebugBuildSicher()
+    {
 #if !DEBUG
         throw new InvalidOperationException(
             "PrototypBenutzerKontext ist nur in Debug-Builds zulässig (Spezifikation A8).");
 #endif
-        _auditLogService = auditLogService;
-        ProtokolliereAnmeldungAsync().GetAwaiter().GetResult();
     }
 
     public Benutzer AktuellerBenutzer => Testbenutzer[_aktuellerIndex].Benutzer;

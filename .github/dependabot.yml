@@ -5,20 +5,31 @@
 # Ein Pull Request von Dependabot wird erst zusammengefuehrt, wenn der
 # CI-Lauf gruen ist und die Aenderung (Versionshinweise, bei Aktionen der
 # neue Commit-Hash) angesehen wurde.
+#
+# cooldown: Eine neue Version wird erst vorgeschlagen, wenn sie mindestens
+# 14 Tage alt ist (gleiche Zwei-Wochen-Regel wie fuer die Aktionen in
+# .github/workflows/ci.yml). Fehlerhafte oder kompromittierte Versionen
+# werden meist in den ersten Tagen entdeckt und zurueckgezogen.
 
 version: 2
 updates:
+  # directory "/" reicht: Dependabot findet von dort die .csproj-Dateien und
+  # das Werkzeugmanifest .config/dotnet-tools.json.
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14
     groups:
       microsoft:
         patterns:
           - "Microsoft.*"
-          # Werkzeug fuer Migrationen (dotnet-tools.json), gehoert versionsgleich
-          # zu Microsoft.EntityFrameworkCore.
+          # Werkzeug fuer Migrationen (.config/dotnet-tools.json). Es faellt
+          # nicht unter "Microsoft.*" und steht deshalb einzeln hier, damit es
+          # zusammen mit Microsoft.EntityFrameworkCore aktualisiert wird
+          # (beide muessen dieselbe Version haben).
           - "dotnet-ef"
 
   - package-ecosystem: "github-actions"
@@ -26,3 +37,5 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 14

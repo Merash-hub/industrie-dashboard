@@ -95,7 +95,13 @@ public sealed class DashboardViewModelTests
 
         public IReadOnlySet<Rolle> Rollen { get; } = new HashSet<Rolle> { Rolle.Instandhaltung };
 
-        public event EventHandler? BenutzerGewechselt;
+        // Wird in diesem Test nie ausgelöst; leere Zugriffsmethoden statt eines
+        // Feldes, damit der Compiler kein ungenutztes Ereignis meldet (CS0067).
+        public event EventHandler? BenutzerGewechselt
+        {
+            add { }
+            remove { }
+        }
 
         public bool HatBerechtigung(Berechtigung berechtigung) => true;
     }

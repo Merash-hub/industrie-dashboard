@@ -45,7 +45,7 @@ public sealed class MainWindowViewModelTests : IDisposable
 
     public void Dispose() => _serviceProvider.Dispose();
 
-    [Fact]
+    [NurImDebugBuildFact]
     public void MehrfacherModulwechsel_HinterlaesstNurEinenAbonnentenProEreignis()
     {
         var viewModel = new MainWindowViewModel(_serviceProvider, _module, _benutzerKontext);

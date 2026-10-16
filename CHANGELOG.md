@@ -28,9 +28,27 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
 - `README.md` auf den tatsächlichen Stand gebracht: Statusabzeichen, Tabelle und Strukturbaum
   korrigiert, „Qualitätsnachweis" statt des veralteten Entstehungshinweises, neuer Abschnitt
   „Sicherheit" (8377e7c).
-- `CLAUDE.md`: Abschnitt „CI und Lieferkette" mit den Regeln für Workflows.
+- `CLAUDE.md`: Abschnitt „CI und Lieferkette" mit den Regeln für Workflows (e256c53).
+- Paketupdates von Dependabot, jeweils nach grünem CI-Lauf übernommen: Microsoft-Gruppe
+  (EF Core, Extensions) 10.0.11 → 10.0.13 und `Microsoft.NET.Test.Sdk` 17.6.0 → 18.11.0 (f04f6e6),
+  `xunit` 2.4.2 → 2.9.3 (aee2cbe), `coverlet.collector` 6.0.0 → 10.1.0 (3ccaecf),
+  `xunit.runner.visualstudio` 2.4.5 → 4.0.1 (24ca95e).
+- Werkzeugmanifest von `dotnet-tools.json` nach `.config/dotnet-tools.json` verschoben, weil
+  Dependabot es nur dort findet; `dotnet-ef` 10.0.11 → 10.0.13, passend zu EF Core.
+- Dependabot schlägt neue Versionen erst vor, wenn sie mindestens 14 Tage alt sind
+  (`cooldown`), für NuGet und GitHub-Aktionen.
+
+### Behoben
+- Compiler-Warnung CS0162 (unerreichbarer Code) im Release-Build von `PrototypBenutzerKontext`:
+  Die Release-Sperre steht jetzt in einer eigenen Methode, die Wirkung ist unverändert.
+- Compiler-Warnung CS0067 (ungenutztes Ereignis) in einem Test-Hilfsobjekt.
+- `dotnet test` im Release-Build schlug bei 13 Tests fehl, weil sie den Prototyp-Anbieter
+  brauchen. Diese Tests werden in Release jetzt mit Begründung übersprungen. Build ohne Warnungen
+  außer den bekannten NU1701.
 
 ### Sicherheit
+- Neuer Test: Im Release-Build lässt sich der Prototyp-Anbieter nicht erzeugen, und es entsteht
+  kein Anmelde-Eintrag.
 - Der CI-Lauf schlägt fehl, wenn ein Paket (auch indirekt eingebunden) eine bekannte Schwachstelle
   hat. Lässt sich das Prüfergebnis nicht lesen, schlägt er ebenfalls fehl (b1b640e).
 - Workflow mit Mindestrechten: nur Lesen, keine Secrets, kein `pull_request_target`, nur
