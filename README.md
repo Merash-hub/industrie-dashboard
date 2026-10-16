@@ -1,9 +1,12 @@
-# Industrie-Dashboard – Prototyp v0.1
+# Industrie-Dashboard – Prototyp
 
-Erster lauffähiger Prototyp der geplanten Windows-Desktop-Anwendung
+[![CI](https://github.com/Merash-hub/industrie-dashboard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Merash-hub/industrie-dashboard/actions/workflows/ci.yml)
+
+Lauffähiger Prototyp der geplanten Windows-Desktop-Anwendung
 (Dashboard, Schichtplanung, Maschinenüberwachung, Kontrolleingriffe).
 Dient als gemeinsame Arbeitsgrundlage für die weitere, schrittweise
-Ausarbeitung – **nicht** als fertiges Produkt.
+Ausarbeitung – **nicht** als fertiges Produkt. Aktueller Meilenstein: 0.3
+(Identität und Rollen), Details im [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Was ist bereits enthalten
 
@@ -12,14 +15,17 @@ Ausarbeitung – **nicht** als fertiges Produkt.
 | Solution-/Projektstruktur (modular, s. u.) | ✅ vollständig |
 | MVVM-Basis, RelayCommand, EventAggregator | ✅ vollständig, mit Tests |
 | Domänenmodell (Maschine, Schicht, Mitarbeiter, Audit-Log, Kontrolleingriff) | ✅ vollständig |
-| EF-Core-Datenkontext (SQLite) | ✅ vollständig, echte Migrationen (`Data/Migrations/`) |
+| EF-Core-Datenkontext (SQLite) mit echten Migrationen (`Data/Migrations/`) | ✅ funktionsfähig |
 | Modulares Plug-in-System für Fachmodule (`IAppModule`) | ✅ vollständig |
-| **Dashboard-Modul** (Kacheln, Live-Chart mit persistentem Anzeigeverlauf, Kontrolleingriff-Demo) | ✅ **lauffähig** mit simulierten Maschinendaten |
-| **Identität und Rollen** (Windows-Gruppen oder Prototyp-Benutzerwechsel, 5 Rollen, Vier-Augen-Prinzip inkl. Zeugenpfad) | ✅ **lauffähig**, siehe `docs/spec-identitaet-rollen.md` |
-| **Kontrolleingriffe-Modul** (Freigabe/Ablehnung/Zurückziehen, Zeugenpfad, Audit-Trail-Ansicht) | ✅ **lauffähig** |
-| Schichtplanung / Maschinenüberwachung | 🔲 Grundgerüst/Platzhalter – nächste Ausbauschritte |
+| **Dashboard-Modul** (Kacheln, Live-Chart, Kontrolleingriff-Demo) | ✅ **funktionsfähig** mit simulierten Maschinendaten |
+| **Anzeigeverlauf** (gemeinsamer Verlauf für das Live-Chart, bleibt beim Modulwechsel erhalten) | ✅ **funktionsfähig**, im Arbeitsspeicher |
+| **Kontrolleingriffe-Modul** (Anfordern, Freigeben, Ablehnen, Zurückziehen, Zeugenpfad, Audit-Trail-Ansicht) | ✅ **funktionsfähig** |
+| **Identität und Rollen** (Windows-Anbieter mit Rollen aus Windows-Gruppen, fünf Rollen, Prototyp-Benutzerwechsel nur im Debug-Build) | ✅ **funktionsfähig**, siehe `docs/spec-identitaet-rollen.md` |
+| **Audit-Schutz** (Audit-Log nur erweiterbar, im Code und per Datenbank-Trigger) | ✅ **funktionsfähig** |
+| Schichtplanung | 🔲 Platzhalter – nächste Ausbauschritte |
+| Maschinenüberwachung als Fachmodul (Detailansicht, Grenzwerte, Alarme) | 🔲 Platzhalter – die simulierte Datenerfassung läuft bereits im Hintergrund |
 | OPC UA / MQTT / SignalR | 🔲 noch nicht angebunden (siehe unten) |
-| Dauerhafte Messdatenspeicherung (PostgreSQL), Auswertungsansicht | 🔲 noch nicht angebunden (Spezifikation Teil D) |
+| TLS, Serverdienst, externe Datenbank (PostgreSQL) | 🔲 noch nicht vorhanden (Spezifikation Teil D) |
 
 Die simulierte Maschinenanbindung (`SimulierteMaschinenDatenQuelle`) ist
 bewusst die **einzige** Stelle, die später durch echte OPC-UA-/MQTT-Clients
@@ -80,16 +86,20 @@ IndustrieDashboard.sln
 src/
   IndustrieDashboard.Core            Domänenmodelle & Interfaces (keine Abhängigkeiten)
   IndustrieDashboard.Shared          MVVM-Basis, EventAggregator, IAppModule-Vertrag
-  IndustrieDashboard.Infrastructure  EF Core (SQLite), Audit-Log, Kontrolleingriff-Service,
-                                     simulierte Maschinendatenquelle
+  IndustrieDashboard.Infrastructure  EF Core (SQLite, Migrationen), Audit-Log, Kontrolleingriff-Service,
+                                     Anzeigeverlauf, Prototyp-Benutzer, simulierte Maschinendatenquelle
+  IndustrieDashboard.Identity.Windows  Windows-Anbieter: Benutzer per SID, Rollen aus Windows-Gruppen
   Modules/
     IndustrieDashboard.Modules.Dashboard             (funktionsfähig)
     IndustrieDashboard.Modules.Schichtplanung        (Platzhalter)
     IndustrieDashboard.Modules.Maschinenueberwachung (Platzhalter)
-    IndustrieDashboard.Modules.Kontrolleingriffe     (Platzhalter)
-  IndustrieDashboard.App             WPF-Shell, Composition Root (DI), Navigation
+    IndustrieDashboard.Modules.Kontrolleingriffe     (funktionsfähig)
+  IndustrieDashboard.App             WPF-Shell, Composition Root (DI), Navigation, Wahl des Identitätsanbieters
 tests/
-  IndustrieDashboard.Tests           xUnit-Tests für Shared & Infrastructure
+  IndustrieDashboard.Tests           xUnit-Tests für Core, Shared, Infrastructure, Identität, Module und Shell
+.github/
+  workflows/ci.yml                   automatischer Build und Test bei jedem Push
+  dependabot.yml                     wöchentliche Vorschläge für Paket- und Aktionsupdates
 ```
 
 **Abhängigkeitsrichtung:** `App` → `Modules.*` → `Shared` + `Core`.
@@ -149,21 +159,45 @@ Das war's – Navigation und DI-Wiring übernimmt die Shell automatisch.
 - Dauerhafte Messdatenspeicherung in PostgreSQL, Auswertungsansicht mit
   seltener Aktualisierung (Spezifikation Teil D)
 - Entra-ID-Anbindung (Abstraktion über `BenutzerKennung` vorbereitet, nicht gebaut)
-- CI-Pipeline (Azure DevOps), wie im Technologiestack vorgesehen
+- TLS und ein Serverdienst für den Betrieb mit mehreren Arbeitsplätzen
+- CI-Pipeline in Azure DevOps, falls im Zielbetrieb gewünscht (GitHub Actions
+  läuft bereits, siehe „Qualitätsnachweis")
 
-## Hinweis zur Entstehung dieses Prototyps
+## Qualitätsnachweis
 
-Dieser Prototyp wurde in einer Linux-Sandbox ohne Zugriff auf nuget.org
-erstellt. Was dort tatsächlich gegen den echten .NET-10-Compiler gebaut und
-geprüft wurde: `Core` vollständig, dazu die Logik von `Shared`, der simulierten
-Maschinendatenquelle und aller xUnit-Tests (über eine Offline-Prüfung mit
-Framework-Referenzen). Jeweils null Fehler und null Warnungen.
+Bei jedem Push auf `main` und bei jedem Pull Request baut GitHub das Projekt
+automatisch auf einem frischen Windows-Rechner (Debug und Release), führt alle
+Tests aus und prüft die Pakete auf bekannte Schwachstellen
+(`.github/workflows/ci.yml`). Das Abzeichen „CI" oben zeigt das Ergebnis des
+letzten Laufs.
 
-Nicht gebaut werden konnten die WPF-Projekte (`App`, `Modules.*`), weil dafür
-der Windows-Desktop-Workload nötig ist, den es unter Linux nicht gibt. Deren
-C#- und XAML-Code wurde von Hand geprüft. Sämtliche NuGet-Paketversionen in
-den `.csproj`-Dateien wurden einzeln gegen die NuGet-API auf Existenz geprüft,
-damit `dotnet restore` nicht an einer erfundenen Versionsnummer scheitert.
+Dieselbe Prüfung lokal:
 
-Falls beim ersten Build unter Windows trotzdem etwas hakt: die Fehlermeldung
-als Text schicken, dann wird das gezielt nachgebessert.
+```powershell
+dotnet build -c Debug
+dotnet build -c Release
+dotnet test -c Debug
+dotnet list package --vulnerable --include-transitive
+```
+
+Zusätzlich manuell geprüft: das Grundkonstrukt (0.1) auf Windows 10 und
+Windows 11, der aktuelle Stand (0.3) auf Windows 11.
+
+## Sicherheit
+
+**Umgesetzt:** fünf Rollen mit zentraler Berechtigungsmatrix, Rollen im
+Betrieb nur aus echter Windows-Gruppenmitgliedschaft, Vier-Augen-Prinzip per
+stabiler Benutzerkennung (nicht per Anzeigename) mit Zeugenpfad, Audit-Log nur
+erweiterbar (Code und Datenbank-Trigger), jede Verweigerung protokolliert,
+„fail closed" (im Zweifel verweigern), Prüfung auf bekannte Schwachstellen
+und Dependabot für die Lieferkette.
+
+**Bewusst noch offen:** Netzwerkbetrieb mit TLS, Serverdienst, externe
+Datenbank, Vertretungen (Spezifikation Teil C und D).
+
+**Wichtig:** Dies ist ein Prototyp. Er ist **nicht** für sicherheitsgerichtete
+Steuerungsfunktionen an echten Anlagen zugelassen oder geprüft.
+
+Mehr dazu: [`SECURITY.md`](SECURITY.md) (auch: wie man eine Lücke meldet),
+[`docs/spec-identitaet-rollen.md`](docs/spec-identitaet-rollen.md) und
+[`CHANGELOG.md`](CHANGELOG.md).
