@@ -31,6 +31,20 @@ updates:
           # zusammen mit Microsoft.EntityFrameworkCore aktualisiert wird
           # (beide muessen dieselbe Version haben).
           - "dotnet-ef"
+    # Das Projekt laeuft auf .NET 10 (LTS). Major-Spruenge auf 11 bei
+    # EF Core, dotnet-ef und Microsoft.Extensions gehoeren zu .NET 11 und
+    # werden erst vorgeschlagen, wenn bewusst ueber den Umstieg entschieden
+    # wurde (dann diese Regeln entfernen). Patch- und Minor-Updates innerhalb
+    # von 10.x kommen weiter. Andere Microsoft-Pakete (z. B.
+    # Microsoft.NET.Test.Sdk) haben eigene Versionsnummern und sind nicht
+    # betroffen.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

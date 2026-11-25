@@ -42,6 +42,10 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
   Dependabot es nur dort findet; `dotnet-ef` 10.0.11 → 10.0.13, passend zu EF Core.
 - Dependabot schlägt neue Versionen erst vor, wenn sie mindestens 14 Tage alt sind
   (`cooldown`), für NuGet und GitHub-Aktionen.
+- Dependabot schlägt für EF Core, `dotnet-ef` und `Microsoft.Extensions.*` keine Sprünge auf
+  Version 11 (.NET 11) mehr vor, bis bewusst über den Umstieg entschieden ist. Anlass: PRs #10 und
+  #12 wollten `dotnet-ef` und Extensions auf 11.0.0 heben, EF Core aber nur auf 10.0.15.
+  `dotnet-ef` war bereits in der Microsoft-Gruppe.
 
 ### Behoben
 - Compiler-Warnung CS0162 (unerreichbarer Code) im Release-Build von `PrototypBenutzerKontext`:
@@ -53,7 +57,7 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
 - Wackeliger Test `AsyncRelayCommand_VerhindertParalleleAusfuehrung` (etwa jeder dritte Lauf rot):
   Er wartete fest 100 ms auf eine 50-ms-Aktion, unter Last zu knapp. Jetzt ohne Uhrzeit, gesteuert
   über Signale. `AsyncRelayCommand` verhindert eine Doppelausführung jetzt auch bei direktem
-  Aufruf, nicht nur über die Schaltfläche (7c0ecf1).
+  Aufruf, nicht nur über die Schaltfläche (0de6a95).
 
 ### Sicherheit
 - Neuer Test: Im Release-Build lässt sich der Prototyp-Anbieter nicht erzeugen, und es entsteht
