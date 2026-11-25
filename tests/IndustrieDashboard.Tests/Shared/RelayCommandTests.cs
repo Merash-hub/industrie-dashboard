@@ -52,24 +52,45 @@ public class RelayCommandTests
     [Fact]
     public async Task AsyncRelayCommand_VerhindertParalleleAusfuehrung()
     {
-        var laufendeAusfuehrungen = 0;
-        var maxGleichzeitig = 0;
+        // Kein Timing: Die Aktion läuft, bis der Test sie über "freigabe" beendet.
+        // Früher wartete der Test fest 100 ms auf eine 50-ms-Aktion; unter Last kam die
+        // Fortsetzung zu spät und CanExecute war noch false (wackeliger Test).
+        var freigabe = new TaskCompletionSource();
+        var aufrufe = 0;
         var command = new AsyncRelayCommand(async () =>
         {
-            laufendeAusfuehrungen++;
-            maxGleichzeitig = Math.Max(maxGleichzeitig, laufendeAusfuehrungen);
-            await Task.Delay(50);
-            laufendeAusfuehrungen--;
+            aufrufe++;
+            await freigabe.Task;
         });
+        var beendet = new TaskCompletionSource();
+        command.CanExecuteChanged += (_, _) =>
+        {
+            if (command.CanExecute(null))
+                beendet.TrySetResult();
+        };
 
         command.Execute(null);
-        // Zweiter Aufruf während der erste noch läuft: CanExecute muss false liefern.
-        var kannWaehrendLaufAusgefuehrtWerden = command.CanExecute(null);
 
-        await Task.Delay(100);
+        // Während die erste Ausführung läuft: CanExecute false, zweiter Aufruf wirkungslos.
+        Assert.False(command.CanExecute(null));
+        command.Execute(null);
+        Assert.Equal(1, aufrufe);
 
-        Assert.False(kannWaehrendLaufAusgefuehrtWerden);
-        Assert.Equal(1, maxGleichzeitig);
+        freigabe.SetResult();
+        await beendet.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
         Assert.True(command.CanExecute(null));
+        Assert.Equal(1, aufrufe);
+    }
+
+    [Fact]
+    public void AsyncRelayCommand_FuehrtNichtAus_WennBedingungFalsch()
+    {
+        var aufrufe = 0;
+        var command = new AsyncRelayCommand(_ => { aufrufe++; return Task.CompletedTask; }, _ => false);
+
+        command.Execute(null);
+
+        Assert.Equal(0, aufrufe);
     }
 }

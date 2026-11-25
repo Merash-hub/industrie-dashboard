@@ -29,6 +29,11 @@ public class AsyncRelayCommand : ICommand
 
     public async void Execute(object? parameter)
     {
+        // Schutz auch bei direktem Aufruf (nicht nur über die Schaltfläche, die CanExecute prüft):
+        // keine zweite Ausführung, solange die erste läuft, und nicht gegen die Bedingung.
+        if (!CanExecute(parameter))
+            return;
+
         _laeuft = true;
         RaiseCanExecuteChanged();
         try
