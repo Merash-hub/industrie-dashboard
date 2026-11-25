@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="MaterialDesignThemes" Version="5.4.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.0.0" />
   </ItemGroup>
 
 </Project>
