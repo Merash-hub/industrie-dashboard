@@ -23,6 +23,9 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
   (8844c85).
 - `SECURITY.md`: Sicherheitslücken privat über GitHub melden, unterstützter Stand, Umfang,
   bestehende Schutzmaßnahmen (e753c02).
+- CI testet zusätzlich im Release-Build (Schritt „Tests (Release)"), also so, wie die Anwendung
+  ausgeliefert wird. Damit läuft der Sicherheitstest „Prototyp-Anbieter verweigert sich in
+  Release" jetzt auch auf GitHub. Getrennte Testberichte für Debug und Release (Auftrag A).
 
 ### Geändert
 - `README.md` auf den tatsächlichen Stand gebracht: Statusabzeichen, Tabelle und Strukturbaum
@@ -32,7 +35,9 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
 - Paketupdates von Dependabot, jeweils nach grünem CI-Lauf übernommen: Microsoft-Gruppe
   (EF Core, Extensions) 10.0.11 → 10.0.13 und `Microsoft.NET.Test.Sdk` 17.6.0 → 18.11.0 (f04f6e6),
   `xunit` 2.4.2 → 2.9.3 (aee2cbe), `coverlet.collector` 6.0.0 → 10.1.0 (3ccaecf),
-  `xunit.runner.visualstudio` 2.4.5 → 4.0.1 (24ca95e).
+  `xunit.runner.visualstudio` 2.4.5 → 4.0.1 (24ca95e), `MaterialDesignThemes` 5.3.2 → 5.4.0
+  (98fa01d), GitHub-Aktionen `setup-dotnet` 6.0.0 → 6.1.0 (15ea078) und `upload-artifact`
+  7.0.1 → 7.0.2 (e32aebc).
 - Werkzeugmanifest von `dotnet-tools.json` nach `.config/dotnet-tools.json` verschoben, weil
   Dependabot es nur dort findet; `dotnet-ef` 10.0.11 → 10.0.13, passend zu EF Core.
 - Dependabot schlägt neue Versionen erst vor, wenn sie mindestens 14 Tage alt sind
@@ -45,6 +50,10 @@ Grundlage: `docs/auftrag-ci-readme.md` (Stufe 1b: CI, Lieferkette, README).
 - `dotnet test` im Release-Build schlug bei 13 Tests fehl, weil sie den Prototyp-Anbieter
   brauchen. Diese Tests werden in Release jetzt mit Begründung übersprungen. Build ohne Warnungen
   außer den bekannten NU1701.
+- Wackeliger Test `AsyncRelayCommand_VerhindertParalleleAusfuehrung` (etwa jeder dritte Lauf rot):
+  Er wartete fest 100 ms auf eine 50-ms-Aktion, unter Last zu knapp. Jetzt ohne Uhrzeit, gesteuert
+  über Signale. `AsyncRelayCommand` verhindert eine Doppelausführung jetzt auch bei direktem
+  Aufruf, nicht nur über die Schaltfläche (7c0ecf1).
 
 ### Sicherheit
 - Neuer Test: Im Release-Build lässt sich der Prototyp-Anbieter nicht erzeugen, und es entsteht

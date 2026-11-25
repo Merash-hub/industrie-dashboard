@@ -14,7 +14,7 @@ fertiges Produkt.
 - **C# / .NET 10** (LTS bis 11/2028). Ursprünglich .NET 8, bewusst gewechselt,
   weil .NET 8 am 10.11.2026 aus dem Support fällt. Nicht zurück auf 8 wechseln.
 - **WPF** (nicht WinUI 3), MVVM, Dependency Injection, EventAggregator
-- **UI-Komponenten**: MaterialDesignInXamlToolkit 5.3.2 und LiveCharts2 2.0.5,
+- **UI-Komponenten**: MaterialDesignInXamlToolkit 5.4.0 und LiveCharts2 2.0.5,
   beide kostenlos. DevExpress/Telerik sind im Zielbild vorgesehen, aber bewusst
   noch nicht eingebunden (Lizenzkosten). Ein späterer Wechsel betrifft nur die
   Views, nicht die ViewModels.
@@ -148,8 +148,9 @@ umbiegen. Normale Benutzer dürfen die Datei lesen, aber nicht schreiben.
 
 `.github/workflows/ci.yml` baut bei jedem Push auf `main` und jedem Pull
 Request gegen `main` auf `windows-latest`: Build Debug und Release, Tests in
-Debug (der Prototyp-Anbieter startet in Release absichtlich nicht), Prüfung
-auf bekannte Schwachstellen. `.github/dependabot.yml` schlägt wöchentlich
+Debug und in Release (in Release werden die Prototyp-Tests mit Begründung
+übersprungen, dafür läuft `[NurImReleaseBuildFact]`), Prüfung auf bekannte
+Schwachstellen. `.github/dependabot.yml` schlägt wöchentlich
 Updates für NuGet und GitHub-Aktionen vor; übernommen wird erst nach grünem
 CI-Lauf. Dasselbe lokal prüfen:
 
@@ -157,6 +158,7 @@ CI-Lauf. Dasselbe lokal prüfen:
 dotnet build -c Debug
 dotnet build -c Release
 dotnet test -c Debug
+dotnet test -c Release
 dotnet list package --vulnerable --include-transitive
 ```
 

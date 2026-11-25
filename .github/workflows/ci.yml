@@ -48,15 +48,24 @@ jobs:
       - name: Build (Debug)
         run: dotnet build IndustrieDashboard.sln --configuration Debug --no-restore
 
-      # Release wird nur gebaut, nicht getestet: der Prototyp-Anbieter startet
-      # in Release absichtlich nicht, die Tests brauchen ihn.
       - name: Build (Release)
         run: dotnet build IndustrieDashboard.sln --configuration Release --no-restore
 
       - name: Tests (Debug)
         run: >-
           dotnet test IndustrieDashboard.sln --configuration Debug --no-build
-          --logger "trx;LogFileName=testergebnisse.trx" --results-directory TestResults
+          --logger "trx;LogFileName=testergebnisse-debug.trx" --results-directory TestResults
+
+      # Release so testen, wie es ausgeliefert wird. Tests, die den
+      # Prototyp-Anbieter brauchen, werden dort mit Begruendung uebersprungen
+      # ([NurImDebugBuildFact]); dafuer laeuft der Sicherheitstest, dass sich der
+      # Prototyp-Anbieter in Release verweigert ([NurImReleaseBuildFact]).
+      # Laeuft auch, wenn Debug rot ist, damit beide Ergebnisse sichtbar sind.
+      - name: Tests (Release)
+        if: ${{ !cancelled() }}
+        run: >-
+          dotnet test IndustrieDashboard.sln --configuration Release --no-build
+          --logger "trx;LogFileName=testergebnisse-release.trx" --results-directory TestResults
 
       - name: Testbericht hochladen
         if: always()

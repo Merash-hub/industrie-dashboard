@@ -166,8 +166,8 @@ Das war's – Navigation und DI-Wiring übernimmt die Shell automatisch.
 ## Qualitätsnachweis
 
 Bei jedem Push auf `main` und bei jedem Pull Request baut GitHub das Projekt
-automatisch auf einem frischen Windows-Rechner (Debug und Release), führt alle
-Tests aus und prüft die Pakete auf bekannte Schwachstellen
+automatisch auf einem frischen Windows-Rechner (Debug und Release), führt die
+Tests in beiden Varianten aus und prüft die Pakete auf bekannte Schwachstellen
 (`.github/workflows/ci.yml`). Das Abzeichen „CI" oben zeigt das Ergebnis des
 letzten Laufs.
 
@@ -177,6 +177,7 @@ Dieselbe Prüfung lokal:
 dotnet build -c Debug
 dotnet build -c Release
 dotnet test -c Debug
+dotnet test -c Release
 dotnet list package --vulnerable --include-transitive
 ```
 
